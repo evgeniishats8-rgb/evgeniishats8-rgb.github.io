@@ -11,7 +11,7 @@ window.SITE = {
   ],
   ROLES: [
     { id: "me_fly", role: "ЛЕЧУ", role_en: "FLYING" }, { id: "me_sponge", role: "СПАНЧ БОБ", role_en: "SPONGEBOB" }, { id: "me_boar", role: "НА КАБАНЕ", role_en: "ON A BOAR" },
-    { id: "me_daisy", role: "НА РОМАШКЕ", role_en: "ON A DAISY" }, { id: "me_roach", role: "НА ТАРАКАНЕ", role_en: "ON A ROACH" }, { id: "me_office", role: "В ОФИСЕ", role_en: "AT THE OFFICE" }, { id: "me_run", role: "НА БЕГУ", role_en: "ON THE RUN" },
+    { id: "me_daisy", role: "НА РОМАШКЕ", role_en: "ON A DAISY" }, { id: "me_roach", role: "НА ТАРАКАНЕ", role_en: "ON A ROACH" }, { id: "me_office", role: "В ОФИСЕ", role_en: "AT THE OFFICE" },
   ],
   // kind: brand бренды, me со мной, art личное и концепты
   WORKS: [
@@ -21,7 +21,6 @@ window.SITE = {
     { id: "w_review", date: "2026-09-05",  w: 720,  h: 1280, title: "ИИ-обзор машины", title_en: "AI car review", tag: "личное", kind: "art", link: "https://www.instagram.com/reel/Dc6ARjEM-n1/" },
     { id: "w_range", date: "2026-08-27",   w: 1280, h: 548,  title: "Range Rover, The Rebirth", tag: "концепт", kind: "art", link: "https://www.instagram.com/reel/DcjBu3TsZwO/" },
     { id: "w_ert", date: "2026-08-20",     w: 1280, h: 534,  title: "Эр-Телеком", title_en: "ER-Telecom", tag: "имидж", kind: "brand" },
-    { id: "me_run", date: "2026-08-14", w: 1920, h: 822, title: "Погоня по крышам", title_en: "Rooftop chase", tag: "со мной", kind: "me" },
     { id: "w_juice", date: "2026-08-14",   w: 1280, h: 549,  title: "Сок", title_en: "Juice", tag: "реклама", kind: "brand" },
     { id: "w_dm", date: "2026-08-14",      w: 1280, h: 549,  title: "Детский мир", title_en: "Detsky Mir", tag: "реклама", kind: "brand" },
     { id: "w_time", date: "2026-08-12",    w: 1280, h: 548,  title: "Сквозь время", title_en: "Through Time", tag: "личное", kind: "art", link: "https://www.instagram.com/reel/Db7jYcdMbx4/" },
