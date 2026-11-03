@@ -461,6 +461,12 @@
     });
     $$(".services__list li").forEach((li) => {
       li.addEventListener("pointerenter", () => {
+        // окно превью принимает формат работы, чтобы она была видна целиком
+        const work = WORKS.find((w) => w.id === li.dataset.preview);
+        if (work) {
+          float.style.aspectRatio = `${work.w} / ${work.h}`;
+          float.style.width = work.h > work.w ? "180px" : "";
+        }
         const src = `assets/video/t/${li.dataset.preview}.mp4`;
         if (!floatVideo.src.endsWith(src)) floatVideo.src = src;
         floatVideo.play().catch(() => {});

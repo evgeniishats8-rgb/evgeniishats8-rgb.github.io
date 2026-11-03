@@ -185,7 +185,7 @@
     srcBox.append(videos[state.i]);
     state.i = i;
     const v = videos[i];
-    v.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:cover";
+    v.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:contain";
     preview.append(v);
     live.video = v; live.id = SCENES[i].id; live.d = 1;
     updateNumbers(i, 1);
@@ -239,10 +239,12 @@
     uniform float uMix, uFade, uTime, uLines;
     const vec3 INK = vec3(.56, .84, 1.);
     const vec3 LUMA = vec3(.3, .59, .11);
+    // работа вписана в Preview целиком: за краем кадра тёмные поля с мягкой кромкой в пару пикселей
+    float inside(vec2 p) { vec2 e = smoothstep(0., .003, p) * smoothstep(0., .003, 1. - p); return e.x * e.y; }
     vec3 tap(sampler2D t, vec4 c, vec2 uv, float zoom, float split) {
-      vec2 q = (uv - .5) / zoom + .5, o = vec2(split, 0.);
-      if (split == 0.) return texture(t, q * c.xy + c.zw).rgb;
-      return vec3(texture(t, (q + o) * c.xy + c.zw).r, texture(t, q * c.xy + c.zw).g, texture(t, (q - o) * c.xy + c.zw).b);
+      vec2 q = (uv - .5) / zoom + .5, o = vec2(split, 0.), p = q * c.xy + c.zw;
+      if (split == 0.) return texture(t, p).rgb * inside(p);
+      return vec3(texture(t, (q + o) * c.xy + c.zw).r, texture(t, p).g, texture(t, (q - o) * c.xy + c.zw).b) * inside(p);
     }
     void main() {
       float h = sin(3.14159265 * uMix);
@@ -325,15 +327,12 @@
   let tracks = {};
   window.SITE.getJson("assets/data/tracks.json").then((d) => { tracks = d; }).catch(() => {});
 
-  const coverOf = (video, id) => {
+  // кадр вписывается в Preview целиком, без обрезки (пользователь, 03.11.2026: «нигде не кропай»)
+  const fitOf = (video) => {
     const vw = video.videoWidth || 1920, vh = video.videoHeight || 824;
-    const s = Math.max(W / vw, H / vh);
+    const s = Math.min(W / vw, H / vh);
     const sx = W / (vw * s), sy = H / (vh * s);
-    const track = tracks[id];
-    let focus = 0.5;
-    if (track && track.focus.length) focus = track.focus[Math.floor(video.currentTime * track.fps / 3) % track.focus.length] ?? 0.5;
-    const pos = sx < 1 ? clamp((focus - sx / 2) / (1 - sx)) : 0.5;
-    return { sx, sy, ox: pos * (1 - sx), oy: 0.5 * (1 - sy) };
+    return { sx, sy, ox: 0.5 * (1 - sx), oy: 0.5 * (1 - sy) };
   };
 
   let lost = false;
@@ -413,9 +412,9 @@
 
     feed(slots[0], a);
     if (b !== a) feed(slots[1], b);
-    const coverA = coverOf(videos[a], SCENES[a].id);
-    const coverB = b === a ? coverA : coverOf(videos[b], SCENES[b].id);
-    const cover = coverOf(video, scene.id);
+    const coverA = fitOf(videos[a]);
+    const coverB = b === a ? coverA : fitOf(videos[b]);
+    const cover = fitOf(video);
     const fade = Math.min(ease(clamp((time - 0.1) / 1.1)), 1 - 0.85 * Math.sin(Math.PI * clamp((now - rerunAt) / 700)));
 
     gl.useProgram(quad.program);

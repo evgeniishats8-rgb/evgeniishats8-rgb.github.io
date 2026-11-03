@@ -74,8 +74,9 @@ video,img{display:block;max-width:100%}
 .preview{cursor:pointer}
 .preview__play{position:absolute;z-index:2;right:10px;bottom:8px;padding:2px 7px;background:rgba(9,9,11,.72);font:400 11px/1.5 Mono,monospace;color:var(--paper);opacity:0;transition:opacity .2s;pointer-events:none}
 .preview:hover .preview__play,.preview:focus-visible .preview__play{opacity:1}
-/* призыв прямо на работе: по нему открывается бриф с этой работой как референсом */
-.preview__want{position:absolute;z-index:3;left:12px;bottom:12px;display:inline-flex;gap:8px;align-items:center;padding:11px 16px;overflow:hidden;border-radius:3px;background:var(--holo);color:#06121a;font:400 13px/1.2 Mono,monospace;box-shadow:0 6px 24px rgba(0,0,0,.35);transition:filter .2s}
+/* призыв строкой под работой, как кнопка ноды: кадр не закрывает. Открывает бриф с этой работой как референсом */
+.preview__foot{flex:none;display:flex;padding:8px 10px;border-top:1px solid var(--line)}
+.preview__want{position:relative;display:inline-flex;gap:8px;align-items:center;padding:10px 16px;overflow:hidden;border-radius:3px;background:var(--holo);color:#06121a;font:400 13px/1.2 Mono,monospace;transition:filter .2s}
 html[data-theme="light"] .preview__want{color:#fff}
 .preview__want::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.55) 50%,transparent 65%);transform:translateX(-120%);animation:want-shine 4.5s 2s infinite}
 @keyframes want-shine{0%{transform:translateX(-120%)}22%,100%{transform:translateX(120%)}}
@@ -263,7 +264,7 @@ html[data-theme="light"] .preview__want{color:#fff}
 .services__list p{color:var(--mute);font-size:14px;max-width:44ch}
 .services__list li:hover h3{transform:translateX(8px)}
 .services__float{position:absolute;left:0;top:0;z-index:3;width:clamp(220px,20vw,320px);aspect-ratio:16/10;overflow:hidden;pointer-events:none;opacity:0;transition:opacity .25s}
-.services__float video{width:100%;height:100%;object-fit:cover}
+.services__float video{width:100%;height:100%;object-fit:contain;background:#000}
 .services__float.is-on{opacity:1}
 
 /* финал */
@@ -353,7 +354,8 @@ html[data-theme="light"] .brief__go{color:#fff}
   .brief{width:calc(100vw - 16px);max-height:calc(100svh - 16px);margin-top:8px}
   .brief__steps span:not(.is-now),.brief__steps i{display:none}
   .brief__go{flex:1 0 100%;text-align:center}
-  .preview__want{left:8px;bottom:8px;padding:9px 13px;font-size:12px}
+  .preview__foot{padding:6px}
+  .preview__want{flex:1;justify-content:center;padding:11px 14px}
 }
 @media (pointer:coarse){.brief__chip{min-height:44px}}
 @media (prefers-reduced-motion:reduce){.brief[open] .brief__box,.brief[open] .brief__box::after,.brief__body.is-in,.preview__want::after{animation:none}}
