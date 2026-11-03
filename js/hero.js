@@ -145,7 +145,7 @@
 
   /* кадр стоит HOLD, затем за FLOW перетекает в следующий через голограмму */
   const HOLD = 4000, FLOW = 2000, PATIENCE = 3000;
-  const state = { i: 0, restAt: 0, inView: true, held: false, active: true };
+  const state = { i: 0, restAt: 0, live: false, inView: true, held: false, active: true };
   const flow = { on: false, from: 0, to: 0, at: 0, warm: false };
   const nextOf = (i) => (i + 1) % SCENES.length;
   const syncVideos = () => {
@@ -197,7 +197,7 @@
   /* кнопки графа */
   $(".btn--queue").addEventListener("click", () => {
     if (plain) showPlain(nextOf(state.i));
-    else if (!flow.on) state.restAt = performance.now() - HOLD;
+    else if (!flow.on) { state.live = true; state.restAt = performance.now() - HOLD; }
   });
   // Re-run: кадр уходит в темноту и возвращается с начала ролика
   let rerunAt = -9999;
@@ -367,6 +367,13 @@
   state.restAt = bornAt;
   const tickQueue = (now) => {
     if (flow.on) return;
+    // пока ролик грузится, стоит его постер: отсчёт кадра идёт с момента, когда ролик пошёл,
+    // но не позже PATIENCE, чтобы битый файл не останавливал очередь
+    if (!state.live) {
+      if (videos[state.i].readyState < 2 && now - state.restAt < PATIENCE) return;
+      state.live = true;
+      state.restAt = now;
+    }
     const wait = now - state.restAt;
     if (wait < HOLD - 1500) return;
     // следующий ролик запускается заранее, чтобы переход шёл уже по живому кадру
@@ -394,7 +401,7 @@
     if (flow.on) {
       u = Math.max(0, (now - flow.at) / FLOW);
       if (u >= 0.5) state.i = flow.to;
-      if (u >= 1) { flow.on = false; state.restAt = now; syncVideos(); }
+      if (u >= 1) { flow.on = false; state.live = false; state.restAt = now; syncVideos(); }
       else { mix = ease(u); d = u < 0.5 ? 1 : ease((u - 0.5) * 2); }
     }
     const a = flow.on ? flow.from : state.i, b = flow.on ? flow.to : state.i;
