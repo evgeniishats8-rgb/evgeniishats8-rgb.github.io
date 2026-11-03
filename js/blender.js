@@ -65,6 +65,8 @@
   }, { rootMargin: "20% 0px" });
   seen.observe(section);
   document.addEventListener("visibilitychange", () => { if (document.hidden) video.pause(); else if (visible) video.play().catch(() => {}); });
+  let held = false;
+  window.SITE.holds.push((on) => { held = on; if (on) video.pause(); else if (visible) video.play().catch(() => {}); });
 
   const place = (x) => {
     if (focus) return;
@@ -151,7 +153,7 @@
 
   const loop = (now) => {
     requestAnimationFrame(loop);
-    if (!visible || document.hidden || video.readyState < 2 || !W) return;
+    if (!visible || held || document.hidden || video.readyState < 2 || !W) return;
     if (!focus && now - lastPointer > 2600) place(0.5 + 0.34 * Math.sin(now / 2600));
     band.a += (band.ta - band.a) * 0.1;
     band.b += (band.tb - band.b) * 0.1;

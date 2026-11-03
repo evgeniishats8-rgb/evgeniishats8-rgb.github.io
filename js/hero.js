@@ -1,5 +1,5 @@
-/* Главная: рабочий граф генерации. Скролл крутит шаги сэмплера,
-   кадр проявляется из шума в Preview, голограмма живёт в ноде LoRA. */
+/* Главная: рабочий граф генерации. Очередь идёт сама: кадр в Preview распадается на однотонные
+   частицы, они собирают следующий шот, и он наливается цветом. Голограмма живёт в ноде LoRA. */
 (() => {
   const $ = (s, r = document) => r.querySelector(s);
   const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
@@ -20,7 +20,6 @@
     denoise: $(".v-denoise"), speed: $(".v-speed"), latent: $(".v-latent"), image: $(".v-image"),
     log: $(".log"), count: $(".log__count"),
   };
-  const hint = $(".preview__hint");
   const grid = $(".grid50");
   grid.innerHTML = "<i></i>".repeat(STEPS);
   const cells = [...grid.children];
@@ -57,6 +56,13 @@
   const layoutWires = () => {
     if (innerWidth <= 820) return;
     LINKS.forEach(([a, b, up], i) => {
+      // нода может быть скрыта на этой ширине, тогда и провода к ней нет
+      if (![a, b].every((name) => $(`[data-port="${name}"]`).offsetParent)) {
+        paths[i].base.removeAttribute("d");
+        paths[i].pulse.removeAttribute("d");
+        paths[i].length = 0;
+        return;
+      }
       const p = portAt(a), q = portAt(b);
       const k = Math.max(40, Math.abs(q.x - p.x) * 0.5);
       const d = up
@@ -137,23 +143,85 @@
     writeLog(i, step, speed);
   };
 
+  /* кадр стоит HOLD, затем идёт переход на FLOW: кадр распадается на однотонные частицы, к CLOUD это облако,
+     к FORMED они собрали следующий шот, дальше он наливается цветом */
+  const HOLD = 4000, FLOW = 3400, CLOUD = 0.38, FORMED = 0.76, PATIENCE = 3000;
+  const state = { i: 0, restAt: 0, inView: true, held: false, active: true };
+  const flow = { on: false, from: 0, to: 0, at: 0, warm: false };
+  const nextOf = (i) => (i + 1) % SCENES.length;
+  const syncVideos = () => {
+    const next = nextOf(state.i);
+    videos[next].preload = "auto";
+    videos.forEach((v, k) => {
+      const wanted = k === state.i || (flow.on && (k === flow.from || k === flow.to)) || (flow.warm && k === next);
+      if (wanted && state.active) { v.preload = "auto"; if (v.paused) v.play().catch(() => {}); }
+      else if (!v.paused) v.pause();
+    });
+  };
+  const startFlow = (to, at = performance.now()) => {
+    Object.assign(flow, { on: true, from: state.i, to, at, warm: false });
+    syncVideos();
+  };
+  const wake = () => {
+    const was = state.active;
+    state.active = state.inView && !state.held && !document.hidden;
+    stageVisible = state.active;
+    if (state.active && !was) state.restAt = performance.now();
+    syncVideos();
+  };
+  new IntersectionObserver(([e]) => { state.inView = e.isIntersecting; wake(); }).observe($(".hero"));
+  document.addEventListener("visibilitychange", wake);
+  window.SITE.holds.push((on) => { state.held = on; wake(); });
+  ["pointerdown", "touchstart", "keydown"].forEach((n) => addEventListener(n, syncVideos, { passive: true }));
+
+  const showSize = (video) => {
+    out.latent.textContent = `[1,16,${Math.round(video.videoHeight / 8)},${Math.round(video.videoWidth / 8)}]`;
+    out.image.textContent = `${video.videoWidth}×${video.videoHeight}`;
+  };
+
+  // без видеокарты ролик показывается обычным видео, а кнопки просто переключают его
+  let plain = false;
+  const showPlain = (i) => {
+    videos[state.i].style.cssText = "";
+    srcBox.append(videos[state.i]);
+    state.i = i;
+    const v = videos[i];
+    v.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:cover";
+    preview.append(v);
+    live.video = v; live.id = SCENES[i].id; live.d = 1;
+    updateNumbers(i, 1);
+    if (v.videoWidth) showSize(v);
+    else v.addEventListener("loadedmetadata", () => showSize(v), { once: true });
+    syncVideos();
+  };
+
+  /* кнопки графа */
+  $(".btn--queue").addEventListener("click", () => {
+    if (plain) showPlain(nextOf(state.i));
+    else if (!flow.on) state.restAt = performance.now() - HOLD;
+  });
+  $(".btn--rerun").addEventListener("click", () => {
+    if (plain) videos[state.i].currentTime = 0;
+    else if (!flow.on) startFlow(state.i);
+  });
+  const openPreview = () => window.SITE.openWork(SCENES[state.i].id);
+  preview.addEventListener("click", openPreview);
+  preview.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPreview(); } });
+
   layoutWires();
   startRig();
   startDrag();
 
   if (!gl) {
-    live.video = videos[0]; live.id = SCENES[0].id; live.d = 1;
+    plain = true;
     document.documentElement.classList.add("no-gl");
-    videos[0].style.cssText = "width:100%;height:100%;object-fit:cover";
-    preview.append(videos[0]);
-    videos[0].play().catch(() => {});
-    updateNumbers(0, 1);
+    showPlain(0);
     startHolo();
     return;
   }
 
-  /* Preview: готовый кадр рисуется одним слоем видео. На смене сцены кадр рассыпается на частицы,
-     они плавно текут и собираются в следующий ролик. Цвет частиц берётся прямо из двух роликов. */
+  /* Preview: готовый кадр рисуется одним слоем видео. На смене сцены он распадается на частицы, они плавно
+     текут и собираются в следующий ролик. Частицы однотонные, форму им даёт яркость двух роликов. */
   const quadVs = `#version 300 es
     in vec2 p; out vec2 vUv;
     void main() { vUv = vec2(p.x * .5 + .5, .5 - p.y * .5); gl_Position = vec4(p, 0., 1.); }`;
@@ -168,7 +236,7 @@
     in vec2 aUv;
     uniform sampler2D uA, uB;
     uniform vec4 uCoverA, uCoverB;
-    uniform float uS, uCross, uTime, uSize;
+    uniform float uS, uCross, uTime, uSize, uTint;
     out vec3 vColor;
     out float vAlpha;
     float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
@@ -189,7 +257,8 @@
       float depth = 1. + s * (seed - .5) * .85;
       gl_Position = vec4(q / depth, 0., 1.);
       gl_PointSize = uSize * mix(1., .5 + seed * .75, s) / depth;
-      vColor = c;
+      // цвет ролика есть только в начале распада и в конце сборки
+      vColor = mix(vec3(.56, .84, 1.) * (.14 + l * 1.15), c, clamp(uTint * 1.5 - seed * .5, 0., 1.));
       vAlpha = 1. - s * .3;
     }`;
   const dotFs = `#version 300 es
@@ -218,7 +287,7 @@
     return u;
   };
   const quad = makeProgram(quadVs, quadFs, ["uV", "uCover", "uAlpha"]);
-  const dots = makeProgram(dotVs, dotFs, ["uA", "uB", "uCoverA", "uCoverB", "uS", "uCross", "uTime", "uSize"]);
+  const dots = makeProgram(dotVs, dotFs, ["uA", "uB", "uCoverA", "uCoverB", "uS", "uCross", "uTime", "uSize", "uTint"]);
 
   const quadVao = gl.createVertexArray();
   gl.bindVertexArray(quadVao);
@@ -264,7 +333,7 @@
     gl.bindBuffer(gl.ARRAY_BUFFER, dotBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, grid, gl.STATIC_DRAW);
     dotCount = gx * gy;
-    dotSize = cell * dpr * 1.6;
+    dotSize = cell * dpr * 1.15;
   };
   const resize = () => {
     const dpr = Math.min(devicePixelRatio || 1, 2);
@@ -283,22 +352,13 @@
   // сбой видеокарты: показываем обычное видео вместо шейдера
   const fallback = () => {
     document.documentElement.classList.add("no-gl");
-    const v = videos[state.i];
-    v.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:cover";
-    preview.append(v);
-    v.play().catch(() => {});
+    plain = true;
+    showPlain(state.i);
   };
   canvas.addEventListener("webglcontextlost", (e) => { e.preventDefault(); lost = true; fallback(); });
 
   // постер на случай, если браузер не дал запустить видео
   const posters = SCENES.map((s) => { const im = new Image(); im.src = `assets/poster/${s.id}.jpg`; return im; });
-  const resume = () => { if (state.inView) videos[state.i].play().catch(() => {}); };
-  ["pointerdown", "touchstart", "keydown"].forEach((n) => addEventListener(n, resume, { passive: true }));
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden) videos.forEach((v) => v.pause());
-    else resume();
-  });
-
   let tracks = {};
   window.SITE.getJson("assets/data/tracks.json").then((d) => { tracks = d; }).catch(() => {});
 
@@ -315,33 +375,6 @@
 
   let lost = false;
   let lastNow = 0, shownVideo = null;
-  let rerunAt = -9999;
-  const IN = 0.42, OUT = 0.8;
-  const state = { i: 0, beats: 0, inView: true };
-  const setProgress = (p) => {
-    const beats = p * SCENES.length;
-    const i = Math.min(SCENES.length - 1, Math.floor(beats));
-    const f = beats - i;
-    state.i = i;
-    state.beats = beats;
-    videos.forEach((v, k) => {
-      const wanted = k === i || (f > 0.74 && k === i + 1) || (f < 0.2 && k === i - 1);
-      if (k === i + 1 && v.preload !== "auto") v.preload = "auto";
-      if (wanted) { v.preload = "auto"; if (v.paused && state.inView) v.play().catch(() => {}); }
-      else if (!v.paused) v.pause();
-    });
-  };
-
-  ScrollTrigger.create({
-    trigger: ".hero", start: "top top", end: "bottom bottom",
-    onUpdate: (st) => setProgress(st.progress),
-    onToggle: (st) => {
-      state.inView = st.isActive;
-      stageVisible = st.isActive;
-      if (!st.isActive) videos.forEach((v) => v.pause());
-      else setProgress(st.progress);
-    },
-  });
 
   const dropQuality = () => {
     const dpr = quality.level ? 1 : Math.min(devicePixelRatio || 1, 2);
@@ -350,7 +383,6 @@
     gl.viewport(0, 0, canvas.width, canvas.height);
     buildGrid(dpr);
   };
-  addEventListener("scroll", () => hint.classList.toggle("is-off", scrollY > 40), { passive: true });
 
   /* кадр ролика в текстуру: только когда он реально сменился */
   const feed = (slot, index) => {
@@ -374,9 +406,19 @@
   const soft = (t) => t * t * (3 - 2 * t);
 
   const bornAt = performance.now();
+  const tickQueue = (now) => {
+    if (flow.on) return;
+    const wait = now - state.restAt;
+    if (wait < HOLD - 1500) return;
+    // следующий ролик запускается заранее, чтобы частицы сразу взяли форму из него
+    if (!flow.warm) { flow.warm = true; syncVideos(); }
+    if (wait < HOLD) return;
+    if (videos[nextOf(state.i)].readyState < 2 && wait < HOLD + PATIENCE) return;
+    startFlow(nextOf(state.i), now);
+  };
   const frame = (now) => {
     requestAnimationFrame(frame);
-    if (!state.inView || lost || document.hidden) { lastNow = 0; return; }
+    if (!state.active || lost) { lastNow = 0; return; }
     if (lastNow) {
       const dt = now - lastNow;
       quality.slow = dt > 40 ? quality.slow + 3 : dt > 26 ? quality.slow + 1 : Math.max(0, quality.slow - 0.5);
@@ -385,24 +427,32 @@
       }
     }
     lastNow = now;
+    tickQueue(now);
     const time = (now - bornAt) / 1000;
-    const i = state.i;
-    const f = state.beats - i;
-    const isLast = i === SCENES.length - 1;
-    const video = videos[i];
-    const scene = SCENES[i];
 
     // сколько кадр рассыпан: 0 готовый кадр, 1 облако частиц
-    let scatter = 0, a = i, b = i, cross = 0;
-    if (i > 0 && f < IN) scatter = 1 - ease(f / IN);
-    if (!isLast && f > OUT) scatter = ease((f - OUT) / (1 - OUT));
-    if (!isLast && f > 0.84) { b = i + 1; cross = 0.5 * soft((f - 0.84) / 0.16); }
-    if (i > 0 && f < 0.16) { a = i - 1; cross = 0.5 + 0.5 * soft(f / 0.16); }
-    const intro = 1 - ease(clamp((time - 0.2) / 2.2));
-    const again = 1 - ease(clamp((now - rerunAt) / 1900));
-    scatter = Math.max(scatter, intro, again);
-    let d = i === 0 ? 1 - intro : ease(clamp(f / IN));
-    d = Math.min(d, 1 - again);
+    let scatter = 0, d = 1, cross = 0, tint = 1, solid = 1;
+    if (flow.on) {
+      const u = Math.max(0, (now - flow.at) / FLOW);
+      if (u >= CLOUD) state.i = flow.to;
+      if (u >= 1) { flow.on = false; state.restAt = now; syncVideos(); }
+      else {
+        cross = soft(clamp((u - 0.2) / 0.3));
+        if (u < CLOUD) {
+          scatter = ease(u / CLOUD);
+          tint = 1 - soft(clamp(u / 0.16));
+          solid = 1 - soft(clamp(u / 0.08));
+        } else {
+          d = ease(clamp((u - CLOUD) / (FORMED - CLOUD)));
+          scatter = 1 - d;
+          tint = soft(clamp((u - FORMED) / (1 - FORMED)));
+          solid = soft(clamp((u - 0.88) / 0.12));
+        }
+      }
+    }
+    const a = flow.on ? flow.from : state.i, b = flow.on ? flow.to : state.i;
+    const video = videos[state.i];
+    const scene = SCENES[state.i];
 
     feed(slots[0], a);
     if (b !== a) feed(slots[1], b);
@@ -412,18 +462,17 @@
 
     gl.clearColor(0.035, 0.035, 0.043, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    const video0 = cross < 0.5 ? 0 : 1;
-    const solid = 1 - soft(clamp(scatter / 0.4));
     if (solid > 0) {
+      const slot = flow.on && b !== a && state.i === b ? 1 : 0;
+      const c = slot ? coverB : coverA;
       gl.useProgram(quad.program);
       gl.bindVertexArray(quadVao);
-      gl.uniform1i(quad.uV, video0);
-      const c = video0 ? coverB : coverA;
+      gl.uniform1i(quad.uV, slot);
       gl.uniform4f(quad.uCover, c.sx, c.sy, c.ox, c.oy);
       gl.uniform1f(quad.uAlpha, solid);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
-    if (scatter > 0.002) {
+    if (flow.on) {
       gl.useProgram(dots.program);
       gl.bindVertexArray(dotVao);
       gl.uniform1i(dots.uB, b === a ? 0 : 1);
@@ -433,26 +482,26 @@
       gl.uniform1f(dots.uCross, cross);
       gl.uniform1f(dots.uTime, time);
       gl.uniform1f(dots.uSize, dotSize);
+      gl.uniform1f(dots.uTint, tint);
       gl.drawArrays(gl.POINTS, 0, dotCount);
     }
 
-    updateNumbers(i, d);
+    updateNumbers(state.i, d);
     live.video = video; live.id = scene.id; live.d = 1 - scatter; live.cover = cover;
     if (shownVideo !== video && video.videoWidth) {
       shownVideo = video;
-      out.latent.textContent = `[1,16,${Math.round(video.videoHeight / 8)},${Math.round(video.videoWidth / 8)}]`;
-      out.image.textContent = `${video.videoWidth}×${video.videoHeight}`;
+      showSize(video);
     }
 
     // импульсы по проводам, пока идёт сэмплинг
-    const running = scatter > 0.002;
+    const running = flow.on;
     paths.forEach((p, k) => {
       p.pulse.style.opacity = running ? 1 : 0;
       if (running) p.pulse.style.strokeDashoffset = -((time * 150 + k * 40) % 153);
     });
 
     const track = tracks[scene.id];
-    const box = track && scatter === 0 ? track.box[Math.floor(video.currentTime * track.fps) % track.box.length] : null;
+    const box = track && !flow.on ? track.box[Math.floor(video.currentTime * track.fps) % track.box.length] : null;
     const w = box ? box[2] * W / cover.sx * 1.28 : 0, h = box ? box[3] * H / cover.sy * 1.28 : 0;
     if (!box || h > H * 0.62) { facebox.style.opacity = 0; return; }
     const x = ((box[0] + box[2] / 2 - cover.ox) / cover.sx) * W - w / 2;
@@ -463,23 +512,8 @@
     facebox.style.height = `${h.toFixed(1)}px`;
   };
 
-  /* кнопки графа */
-  const beatY = (beats) => {
-    const hero = $(".hero");
-    return hero.offsetTop + (hero.offsetHeight - innerHeight) * (beats / SCENES.length);
-  };
-  $(".btn--queue").addEventListener("click", () => {
-    if (state.i >= SCENES.length - 1) window.SITE.glide("#about");
-    else window.SITE.glide(beatY(state.i + 1.6));
-  });
-  $(".btn--rerun").addEventListener("click", () => { rerunAt = performance.now(); });
-  const openPreview = () => window.SITE.openWork(SCENES[state.i].id);
-  preview.addEventListener("click", openPreview);
-  preview.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPreview(); } });
-
-  setProgress(0);
   updateNumbers(0, 0);
-  videos[0].play().catch(() => {});
+  startFlow(0, bornAt - FLOW * CLOUD);
   requestAnimationFrame(frame);
   startHolo();
 
@@ -516,21 +550,79 @@
       gsap.to(nodes, { x: 0, y: 0, duration: 0.8, ease: "power3.out", onUpdate: layoutWires });
       reset.hidden = true;
     });
+    let width = innerWidth;
+    addEventListener("resize", () => {
+      if (innerWidth === width) return;
+      width = innerWidth;
+      gsap.set(nodes, { x: 0, y: 0 });
+      reset.hidden = true;
+      layoutWires();
+    });
   }
 
-  /* десять блоков всегда одно тело: сомкнуты, перетекают и целиком вписаны в ноду */
+  /* мягкое тело: двенадцать шаров сливаются в одну массу и медленно перетекают вслед за объектом */
   function startRig() {
     const c = $(".rig__canvas");
-    const g = c.getContext("2d");
     const nameEl = $(".rig__name"), noteEl = $(".rig__note");
-    const COUNT = 10, SPINE = 7;
-    let rigs = null, W2 = 0, H2 = 0, dpr2 = 1, last = 0, placed = false;
-    // углы блоков живут в координатах кадра, их скорость даёт мягкий старт и остановку
-    const blocks = Array.from({ length: COUNT }, () => Array.from({ length: 4 }, () => [0, 0, 0, 0]));
+    const COUNT = 12, SPINE = 7;
+    const g = c.getContext("webgl2", { antialias: false, alpha: true, premultipliedAlpha: true });
+    const flat = g ? null : c.getContext("2d");
+    let rigs = null, W2 = 0, H2 = 0, dpr2 = 1, last = 0, placed = false, shape = null, fit = 0, label = "";
+    // x, y, радиус и их скорости: в координатах кадра
+    const balls = Array.from({ length: COUNT }, () => [0, 0, 0, 0, 0, 0]);
+    const shown = new Float32Array(COUNT * 3);
+    const u = {};
+    if (g) {
+      const vs = `#version 300 es
+        in vec2 p;
+        void main() { gl_Position = vec4(p, 0., 1.); }`;
+      const fs = `#version 300 es
+        precision highp float;
+        uniform vec3 uB[${COUNT}];
+        uniform float uK, uT, uRing, uTime, uH;
+        out vec4 o;
+        void main() {
+          vec2 q = vec2(gl_FragCoord.x, uH - gl_FragCoord.y);
+          float sum = 0.;
+          vec2 dir = vec2(0.);
+          for (int i = 0; i < ${COUNT}; i++) {
+            vec2 v = q - uB[i].xy;
+            float l = length(v) + .001;
+            float w = exp(-min((l - uB[i].z) / uK, 60.));
+            sum += w;
+            dir += w * v / l;
+          }
+          dir /= sum;
+          float d = -uK * log(sum);
+          float body = smoothstep(1., -1., d);
+          if (body <= 0.) discard;
+          float t = clamp(-d / uT, 0., 1.);
+          vec3 n = normalize(vec3(dir * (1. - t), sqrt(1. - (1. - t) * (1. - t)) + .001));
+          float rim = pow(1. - n.z, 1.7);
+          float lit = max(dot(n, normalize(vec3(-.45, -.55, .7))), 0.);
+          float rings = smoothstep(.1, 0., abs(fract(d / uRing + uTime * .07) - .5));
+          vec3 holo = vec3(.56, .84, 1.);
+          vec3 col = vec3(.059, .063, .075) + holo * (.04 + lit * .15 + rim * .62 + rings * .13) + vec3(.8) * pow(lit, 26.) * .45;
+          o = vec4(col * body, body);
+        }`;
+      const make = (type, src) => { const s = g.createShader(type); g.shaderSource(s, src); g.compileShader(s); return s; };
+      const prog = g.createProgram();
+      g.attachShader(prog, make(g.VERTEX_SHADER, vs));
+      g.attachShader(prog, make(g.FRAGMENT_SHADER, fs));
+      g.linkProgram(prog);
+      g.useProgram(prog);
+      g.bindBuffer(g.ARRAY_BUFFER, g.createBuffer());
+      g.bufferData(g.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), g.STATIC_DRAW);
+      const at = g.getAttribLocation(prog, "p");
+      g.enableVertexAttribArray(at);
+      g.vertexAttribPointer(at, 2, g.FLOAT, false, 0, 0);
+      ["uB", "uK", "uT", "uRing", "uTime", "uH"].forEach((n) => { u[n] = g.getUniformLocation(prog, n); });
+    }
     const size = () => {
-      dpr2 = Math.min(devicePixelRatio || 1, 2);
+      dpr2 = Math.min(devicePixelRatio || 1, 1.5);
       W2 = c.clientWidth; H2 = c.clientHeight;
       c.width = Math.round(W2 * dpr2); c.height = Math.round(H2 * dpr2);
+      if (g) g.viewport(0, 0, c.width, c.height);
     };
     new ResizeObserver(size).observe(c);
     size();
@@ -545,98 +637,105 @@
       const f = t - Math.floor(t);
       return { pts: pa.map((v, i) => v + (pb[i] - v) * f), kind: rig.kinds[a] };
     };
-    // между сценами это один сомкнутый брусок
-    const stack = () => Array.from({ length: COUNT }, (_, i) => {
-      const x = i % 5, y = Math.floor(i / 5);
-      return [[x, y], [x + 1, y], [x + 1, y + 1], [x, y + 1]].map(([u, v]) => [0.5 + u * 0.1, 0.4 + v * 0.1]);
+    // между сценами это один округлый сгусток
+    const blob = (ratio) => Array.from({ length: COUNT }, (_, i) => {
+      const a = i / COUNT * 6.283;
+      return [ratio / 2 + Math.cos(a) * 0.1, 0.5 + Math.sin(a) * 0.1, 0.1];
     });
     const targets = (pose, ratio) => {
       const px = (i) => pose.pts[i * 2] * ratio, py = (i) => pose.pts[i * 2 + 1];
       if (pose.kind === "h") {
-        const bar = (ax, ay, bx, by, w) => {
-          const len = Math.hypot(bx - ax, by - ay) || 1e-4;
-          const nx = (-(by - ay) / len) * w / 2, ny = ((bx - ax) / len) * w / 2;
-          return [[ax + nx, ay + ny], [bx + nx, by + ny], [bx - nx, by - ny], [ax - nx, ay - ny]];
-        };
-        const joint = (p, q, w) => bar(px(p), py(p), px(q), py(q), w);
-        const shoulder = Math.max(0.02, Math.hypot(px(1) - px(2), py(1) - py(2)));
-        const limb = shoulder * 0.34;
-        // голова растёт из плеч, поэтому не отрывается от тела
+        const along = (p, q, t) => [px(p) + (px(q) - px(p)) * t, py(p) + (py(q) - py(p)) * t];
         const nx = (px(1) + px(2)) / 2, ny = (py(1) + py(2)) / 2;
-        const up = Math.hypot(px(0) - nx, py(0) - ny) || 1e-4;
-        const hx = nx + ((px(0) - nx) / up) * shoulder * 0.7, hy = ny + ((py(0) - ny) / up) * shoulder * 0.7;
+        const hx = (px(7) + px(8)) / 2, hy = (py(7) + py(8)) / 2;
+        const trunk = (t) => [nx + (hx - nx) * t, ny + (hy - ny) * t];
+        const w = Math.max(0.03, Math.hypot(px(1) - px(2), py(1) - py(2)), Math.hypot(hx - nx, hy - ny) * 0.55);
         return [
-          joint(7, 9, limb), joint(8, 10, limb), joint(9, 11, limb * 0.85), joint(10, 12, limb * 0.85),
-          [[px(1), py(1)], [px(2), py(2)], [px(8), py(8)], [px(7), py(7)]],
-          bar(nx, ny, hx, hy, shoulder * 0.62),
-          joint(1, 3, limb), joint(2, 4, limb), joint(3, 5, limb * 0.85), joint(4, 6, limb * 0.85),
+          [px(0), py(0), w * 0.36], [...trunk(0.12), w * 0.5], [...trunk(0.5), w * 0.46], [...trunk(0.9), w * 0.46],
+          [...along(1, 3, 0.55), w * 0.2], [...along(2, 4, 0.55), w * 0.2],
+          [...along(3, 5, 0.7), w * 0.17], [...along(4, 6, 0.7), w * 0.17],
+          [...along(7, 9, 0.55), w * 0.26], [...along(8, 10, 0.55), w * 0.26],
+          [...along(9, 11, 0.7), w * 0.2], [...along(10, 12, 0.7), w * 0.2],
         ];
       }
-      // предмет: блоки встык вдоль формы, без зазоров
+      // предмет: шары идут вдоль формы, радиус равен её полуширине
       const rail = (start, t) => {
         const f = t * (SPINE - 1), i = Math.min(SPINE - 2, Math.floor(f)), k = f - i;
         return [px(start + i) + (px(start + i + 1) - px(start + i)) * k, py(start + i) + (py(start + i + 1) - py(start + i)) * k];
       };
       return Array.from({ length: COUNT }, (_, i) => {
-        const a = i / COUNT, b = (i + 1) / COUNT;
-        return [rail(SPINE, a), rail(SPINE, b), rail(SPINE * 2, b), rail(SPINE * 2, a)];
+        const t = (i + 0.5) / COUNT;
+        const [ax, ay] = rail(SPINE, t), [bx, by] = rail(SPINE * 2, t);
+        return [(ax + bx) / 2, (ay + by) / 2, Math.max(0.03, Math.hypot(bx - ax, by - ay) / 2)];
       });
     };
     const loop = (now) => {
       requestAnimationFrame(loop);
-      if (!W2 || !stageVisible || document.hidden || !live.video) { last = now; return; }
+      if (!W2 || !stageVisible || !live.video) { last = now; return; }
       if (quality.level > 1 && now - (loop.at || 0) < 33) return;
       loop.at = now;
       const dt = Math.min(0.05, (now - last) / 1000 || 0.016); last = now;
       const rig = rigs && rigs[live.id];
       const pose = rig && live.d >= 0.35 ? blend(rig, live.video.currentTime * rig.fps) : null;
       const ratio = (live.video.videoWidth || 1920) / (live.video.videoHeight || 824);
-      const goal = pose ? targets(pose, ratio) : stack();
+      if (pose) shape = targets(pose, ratio);
+      else if (!shape || live.d < 0.35) shape = blob(ratio);
       if (!placed) {
-        goal.forEach((b, i) => b.forEach((p, k) => { blocks[i][k][0] = p[0]; blocks[i][k][1] = p[1]; }));
+        balls.forEach((b, i) => { b[0] = shape[i][0]; b[1] = shape[i][1]; b[2] = shape[i][2]; });
         placed = true;
       }
-      // пружина без отскока: блок разгоняется и тормозит плавно, соседние идут с лёгкой волной
-      blocks.forEach((b, i) => {
-        const w = 6.5 - (i % 5) * 0.28;
-        b.forEach((p, k) => {
-          [0, 1].forEach((axis) => {
-            const v = axis + 2;
-            p[v] += ((goal[i][k][axis] - p[axis]) * w * w - 2 * w * p[v]) * dt;
-            p[axis] += p[v] * dt;
-          });
-        });
+      // тугая пружина без отскока: склейки в ролике не дёргают массу, она перетекает за секунду
+      balls.forEach((b, i) => {
+        const w = 2.3 + (i % 4) * 0.2;
+        for (let k = 0; k < 3; k++) {
+          b[k + 3] += ((shape[i][k] - b[k]) * w * w - 2 * w * b[k + 3]) * dt;
+          b[k] += b[k + 3] * dt;
+        }
       });
-      // кадр считается по самим блокам, поэтому они всегда целиком в ноде
-      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-      blocks.forEach((b) => b.forEach(([x, y]) => {
-        x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
-      }));
-      const turn = now / 2200;
-      const dx = Math.sin(turn) * 9, dy = -6 - Math.cos(turn) * 2;
-      const pad = 12;
-      const view = Math.min((W2 - pad * 2 - Math.abs(dx)) / Math.max(x1 - x0, 1e-3), (H2 - pad * 2 - Math.abs(dy)) / Math.max(y1 - y0, 1e-3));
-      const ox = (W2 - dx) / 2 - ((x0 + x1) / 2) * view, oy = (H2 - dy) / 2 - ((y0 + y1) / 2) * view;
-      nameEl.textContent = pose ? (pose.kind === "h" ? "HUMAN_BLOCK" : "OBJECT_BLOCK") : "ASSEMBLING";
-      noteEl.textContent = `boxes ${COUNT} · cameras 0`;
-      g.setTransform(dpr2, 0, 0, dpr2, 0, 0);
-      g.clearRect(0, 0, W2, H2);
-      g.lineWidth = 1;
-      const path = (q) => { g.beginPath(); q.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); };
-      blocks.forEach((corners) => {
-        const face = corners.map(([x, y]) => [ox + x * view, oy + y * view]);
-        const back = face.map(([x, y]) => [x + dx, y + dy]);
-        path(back); g.strokeStyle = "rgba(143,214,255,.3)"; g.stroke();
-        face.forEach((p, i) => {
-          const n = (i + 1) % 4;
-          path([p, face[n], back[n], back[i]]);
-          g.fillStyle = "rgba(143,214,255,.07)"; g.fill();
-          g.strokeStyle = "rgba(143,214,255,.45)"; g.stroke();
-        });
-        path(face); g.fillStyle = "rgba(15,16,19,.86)"; g.fill();
-        g.fillStyle = "rgba(143,214,255,.13)"; g.fill();
-        g.strokeStyle = "#8fd6ff"; g.stroke();
+      const time = now / 1000;
+      const sway = reduced ? 0 : 1;
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, mean = 0, big = 0;
+      balls.forEach((b, i) => {
+        const r = Math.max(0.005, b[2]) * (1 + sway * 0.1 * Math.sin(time * 0.9 + i * 1.9));
+        const x = b[0] + sway * Math.sin(time * 0.7 + i * 2.4) * r * 0.22;
+        const y = b[1] + sway * Math.cos(time * 0.6 + i * 1.3) * r * 0.22;
+        shown[i * 3] = x; shown[i * 3 + 1] = y; shown[i * 3 + 2] = r;
+        x0 = Math.min(x0, x - r); x1 = Math.max(x1, x + r); y0 = Math.min(y0, y - r); y1 = Math.max(y1, y + r);
+        mean += r / COUNT; big = Math.max(big, r);
       });
+      // слияние шаров добавляет к контуру не больше k·ln(12), поэтому масса всегда целиком в ноде
+      const k = mean * 0.36, grow = k * 2.5, pad = 8;
+      const exact = Math.min((W2 - pad * 2) / (x1 - x0 + grow * 2), (H2 - pad * 2) / (y1 - y0 + grow * 2));
+      fit = fit ? fit + (exact - fit) * (1 - Math.exp(-dt * 2.5)) : exact;
+      const view = Math.min(fit, exact);
+      const ox = W2 / 2 - ((x0 + x1) / 2) * view, oy = H2 / 2 - ((y0 + y1) / 2) * view;
+      const name = pose ? (pose.kind === "h" ? "HUMAN_FORM" : "OBJECT_FORM") : "MORPHING";
+      if (name !== label) { label = name; nameEl.textContent = name; noteEl.textContent = `metaballs ${COUNT} · cameras 0`; }
+      if (!g) {
+        flat.setTransform(dpr2, 0, 0, dpr2, 0, 0);
+        flat.clearRect(0, 0, W2, H2);
+        flat.fillStyle = "rgba(143,214,255,.16)";
+        for (let i = 0; i < COUNT; i++) {
+          flat.beginPath();
+          flat.arc(ox + shown[i * 3] * view, oy + shown[i * 3 + 1] * view, shown[i * 3 + 2] * view, 0, 6.283);
+          flat.fill();
+        }
+        return;
+      }
+      for (let i = 0; i < COUNT; i++) {
+        shown[i * 3] = (ox + shown[i * 3] * view) * dpr2;
+        shown[i * 3 + 1] = (oy + shown[i * 3 + 1] * view) * dpr2;
+        shown[i * 3 + 2] *= view * dpr2;
+      }
+      g.clearColor(0, 0, 0, 0);
+      g.clear(g.COLOR_BUFFER_BIT);
+      g.uniform3fv(u.uB, shown);
+      g.uniform1f(u.uK, k * view * dpr2);
+      g.uniform1f(u.uT, big * view * dpr2);
+      g.uniform1f(u.uRing, 7 * dpr2);
+      g.uniform1f(u.uTime, sway * time);
+      g.uniform1f(u.uH, c.height);
+      g.drawArrays(g.TRIANGLES, 0, 3);
     };
     requestAnimationFrame(loop);
   }
@@ -645,18 +744,20 @@
   function startHolo() {
     const c = $(".holo");
     const g = !reduced && c.getContext("webgl2", { antialias: true, alpha: true, premultipliedAlpha: false });
-    if (!g) return;
+    if (!g) { $(".v-points").textContent = "off"; return; }
     const GRID_X = light ? 130 : 200, GRID_Y = light ? 56 : 86;
     const vs = `#version 300 es
       in vec2 aUv;
       uniform sampler2D uT;
-      uniform float uTime, uAspect, uDpr, uSpin, uD, uBg, uRatio, uFocus;
+      uniform float uTime, uAspect, uDpr, uSpin, uD, uRatio, uFocus, uLod;
       out float vA;
       float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+      float luma(vec2 uv, float lod) { return dot(textureLod(uT, uv, lod).rgb, vec3(.3, .59, .11)); }
       void main() {
-        vec3 c = texture(uT, aUv).rgb;
-        float l = dot(c, vec3(.3, .59, .11));
-        float diff = abs(l - uBg);
+        float l = luma(aUv, uLod);
+        // фон считается по краям кадра прямо в шейдере: копировать кадр в память дорого
+        float bg = (luma(vec2(.25, .03), 7.) + luma(vec2(.75, .03), 7.) + luma(vec2(.25, .97), 7.) + luma(vec2(.75, .97), 7.)) * .25;
+        float diff = abs(l - bg);
         float seen = smoothstep(.07, .3, diff);
         float scatter = pow(1. - uD, 1.5);
         vec3 p = vec3((aUv.x - uFocus) * 2. * 1.75, (.5 - aUv.y) * 2. * 1.75 / uRatio, (diff - .22) * .9);
@@ -689,20 +790,15 @@
     g.enableVertexAttribArray(aUv);
     g.vertexAttribPointer(aUv, 2, g.FLOAT, false, 0, 0);
     const u2 = {};
-    ["uT", "uTime", "uAspect", "uDpr", "uSpin", "uD", "uBg", "uRatio", "uFocus"].forEach((n) => { u2[n] = g.getUniformLocation(prog, n); });
+    ["uT", "uTime", "uAspect", "uDpr", "uSpin", "uD", "uRatio", "uFocus", "uLod"].forEach((n) => { u2[n] = g.getUniformLocation(prog, n); });
     const tex2 = g.createTexture();
     g.activeTexture(g.TEXTURE0);
     g.bindTexture(g.TEXTURE_2D, tex2);
-    g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.LINEAR);
+    g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.LINEAR_MIPMAP_LINEAR);
     g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_S, g.CLAMP_TO_EDGE);
     g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_T, g.CLAMP_TO_EDGE);
     g.uniform1i(u2.uT, 0);
     $(".v-points").textContent = (GRID_X * GRID_Y).toLocaleString("en").replace(",", " ");
-    // маленькая копия кадра: и текстура для точек, и оценка фона по краям
-    const small = document.createElement("canvas");
-    small.width = 130; small.height = 56;
-    const sx = small.getContext("2d", { willReadFrequently: true });
-    let sampled = 0;
     const tilt = { x: 0, tx: 0 };
     stage.addEventListener("pointermove", (e) => {
       const r = stage.getBoundingClientRect();
@@ -720,7 +816,7 @@
     size();
     const depthEl = $(".v-az");
     const started = performance.now();
-    let last = -1, bg = 0.5;
+    let last = -1, texW = 0, texH = 0;
     const loop = (now) => {
       requestAnimationFrame(loop);
       const video = live.video;
@@ -728,21 +824,14 @@
       const every = quality.level === 0 ? 66 : quality.level === 1 ? 110 : 220;
       if (video.currentTime !== last && now - (loop.at || 0) > every) {
         last = video.currentTime; loop.at = now;
-        sx.drawImage(video, 0, 0, small.width, small.height);
-        if (now - sampled > 400) {
-          sampled = now;
-          const data = sx.getImageData(0, 0, small.width, small.height).data;
-          const edge = [];
-          for (let x = 0; x < small.width; x += 4) {
-            [0, small.height - 1].forEach((y) => {
-              const i = (y * small.width + x) * 4;
-              edge.push((data[i] * 0.3 + data[i + 1] * 0.59 + data[i + 2] * 0.11) / 255);
-            });
-          }
-          edge.sort((p, q) => p - q);
-          bg += (edge[edge.length >> 1] - bg) * 0.4;
+        if (video.videoWidth === texW && video.videoHeight === texH) {
+          g.texSubImage2D(g.TEXTURE_2D, 0, 0, 0, g.RGBA, g.UNSIGNED_BYTE, video);
+        } else {
+          g.texImage2D(g.TEXTURE_2D, 0, g.RGBA, g.RGBA, g.UNSIGNED_BYTE, video);
+          texW = video.videoWidth; texH = video.videoHeight;
+          g.uniform1f(u2.uLod, Math.max(0, Math.log2(texW / GRID_X)));
         }
-        g.texImage2D(g.TEXTURE_2D, 0, g.RGBA, g.RGBA, g.UNSIGNED_BYTE, small);
+        g.generateMipmap(g.TEXTURE_2D);
       }
       tilt.x += (tilt.tx - tilt.x) * 0.06;
       const time = (now - started) / 1000;
@@ -752,7 +841,6 @@
       g.uniform1f(u2.uTime, time);
       g.uniform1f(u2.uSpin, spin);
       g.uniform1f(u2.uD, live.d);
-      g.uniform1f(u2.uBg, bg);
       g.uniform1f(u2.uFocus, live.cover ? live.cover.ox + live.cover.sx / 2 : 0.5);
       g.uniform1f(u2.uRatio, (video.videoWidth || 1920) / (video.videoHeight || 824));
       g.drawArrays(g.POINTS, 0, GRID_X * GRID_Y);

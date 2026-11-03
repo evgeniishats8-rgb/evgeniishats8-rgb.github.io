@@ -61,7 +61,7 @@
       </article>
 
       <article class="node node--preview">
-        <header class="node__bar"><i class="port port--in port--bottom" data-port="preview"></i>Preview<span class="preview__hint" data-i18n="hero.hint">листай, чтобы запустить следующую генерацию</span><span class="preview__file"></span></header>
+        <header class="node__bar"><i class="port port--in port--bottom" data-port="preview"></i>Preview<span class="preview__hint" data-i18n="hero.hint">очередь идёт сама, ниже работы</span><span class="preview__file"></span></header>
         <div class="preview" role="button" tabindex="0" aria-label="Play this work with sound">
           <canvas class="preview__canvas" aria-hidden="true"></canvas>
           <span class="preview__play" data-i18n="hero.sound">со звуком</span>
@@ -89,7 +89,7 @@
       </article>
 
       <article class="node node--vae">
-        <header class="node__bar"><i class="port port--in" data-port="vae"></i>Blockout<span class="rig__name"></span><i class="port port--out" data-port="vae-out"></i></header>
+        <header class="node__bar"><i class="port port--in" data-port="vae"></i>Soft Body<span class="rig__name"></span><i class="port port--out" data-port="vae-out"></i></header>
         <div class="rig"><canvas class="rig__canvas" aria-hidden="true"></canvas><span class="rig__note"></span></div>
       </article>
 
@@ -121,6 +121,7 @@
             </dl>
             <div class="card__sign" data-i18n="card.sign">Шац</div>
             <div class="card__chip"></div>
+            <div class="card__ghost" aria-hidden="true"><i></i></div>
             <p class="card__mrz">P&lt;AI&lt;SHATS&lt;&lt;EVGENII&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;<br>JD0000007&lt;NO&lt;CAMERAS&lt;&lt;ONE&lt;PERSON&lt;&lt;&lt;&lt;&lt;&lt;07</p>
             <div class="card__holo"></div>
           </div>
@@ -210,14 +211,15 @@
 
 master = timeline.render(fps=<em>24</em>, lufs=<em>-14</em>, cameras=<em>0</em>)</code></pre>
     <ol class="line__nodes">
-      <li><span>01</span><h3 data-i18n="line.1">Идея</h3><small>claude</small></li>
-      <li><span>02</span><h3 data-i18n="line.2">Стиль</h3><small>midjourney</small></li>
-      <li><span>03</span><h3 data-i18n="line.3">Кадры</h3><small>nano banana</small></li>
-      <li><span>04</span><h3 data-i18n="line.4">Видео</h3><small>kling, seedance, wan, higgsfield</small></li>
-      <li><span>05</span><h3>3D</h3><small>blender</small></li>
-      <li><span>06</span><h3 data-i18n="line.6">Монтаж</h3><small>davinci resolve, hyperframes</small></li>
-      <li><span>07</span><h3 data-i18n="line.7">Звук</h3><small>elevenlabs</small></li>
-      <li><span>08</span><h3 data-i18n="line.8">Контроль</h3><small>ffmpeg, qc</small></li>
+      <li><span>01</span><h3 data-i18n="line.1">Идея</h3><small>claude, gpt, kimi</small></li>
+      <li><span>02</span><h3 data-i18n="line.2">Стиль</h3><small>midjourney, nano banana 2.1, gpt, myself</small></li>
+      <li><span>03</span><h3 data-i18n="line.3">Кадры</h3><small>nano banana 2.1, midjourney, gpt, myself</small></li>
+      <li><span>04</span><h3 data-i18n="line.4">Видео</h3><small>kling, seedance, veo, sora, wan, hailuo, runway, higgsfield</small></li>
+      <li><span>05</span><h3>3D</h3><small>blender, unreal</small></li>
+      <li><span>06</span><h3 data-i18n="line.vfx">ИИ VFX</h3><small>comfyui, fusion, after effects</small></li>
+      <li><span>07</span><h3 data-i18n="line.6">Монтаж</h3><small>davinci resolve, hyperframes</small></li>
+      <li><span>08</span><h3 data-i18n="line.7">Звук</h3><small>elevenlabs, myself</small></li>
+      <li><span>09</span><h3 data-i18n="line.8">Контроль</h3><small>ffmpeg, qc</small></li>
     </ol>
   </section>
 
@@ -228,6 +230,7 @@ master = timeline.render(fps=<em>24</em>, lufs=<em>-14</em>, cameras=<em>0</em>)
       <li data-preview="w_zepro" tabindex="0" role="button"><span>3/</span><h3 data-i18n="svc.3">Продукт</h3><p data-i18n="svc.3d">Zepro, Детский мир</p></li>
       <li data-preview="w_polar" tabindex="0" role="button"><span>4/</span><h3 data-i18n="svc.4">Сцена и экраны</h3><p>Legal Unity, Polar Night</p></li>
       <li data-preview="w_car" tabindex="0" role="button"><span>5/</span><h3 data-i18n="svc.5">Рилсы</h3><p data-i18n="svc.5d">серии для соцсетей</p></li>
+      <li data-preview="me_run" tabindex="0" role="button"><span>6/</span><h3 data-i18n="svc.6">ИИ VFX</h3><p data-i18n="svc.6d">эффекты, композ, доработка кадра</p></li>
     </ol>
     <div class="services__float" aria-hidden="true"><video muted loop playsinline preload="none"></video></div>
   </section>
@@ -251,7 +254,7 @@ master = timeline.render(fps=<em>24</em>, lufs=<em>-14</em>, cameras=<em>0</em>)
   </footer>
 </main>
 
-<noscript><p style="padding:24px;color:#e9e7e1;font-family:sans-serif">Evgenii Shats, JDROBYSHEV. <a style="color:#8fd6ff" href="https://www.instagram.com/jdrobyshev/">Instagram</a></p></noscript>
+<noscript><style>main,.nav{opacity:1!important}</style><p style="padding:24px;color:#e9e7e1;font-family:sans-serif">Evgenii Shats, JDROBYSHEV. <a style="color:#8fd6ff" href="https://www.instagram.com/jdrobyshev/">Instagram</a></p></noscript>
 
 <dialog class="lightbox" aria-label="Work viewer">
   <button type="button" class="lightbox__nav lightbox__nav--prev" aria-label="Previous">←</button>

@@ -37,4 +37,5 @@
   }, true);
 
   I18N.apply();
+  document.documentElement.classList.add("ready");
 })();

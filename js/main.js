@@ -8,6 +8,7 @@
   const { WORKS, CLIENTS } = window.SITE;
 
   gsap.registerPlugin(ScrollTrigger, Draggable);
+  ScrollTrigger.config({ ignoreMobileResize: true });
 
   /* плавный скролл */
   let lenis = null;
@@ -156,6 +157,8 @@
     const nx = clamp((e.clientX - r.left) / r.width), ny = clamp((e.clientY - r.top) / r.height);
     body.style.setProperty("--ry", `${(nx - 0.5) * 26}deg`);
     body.style.setProperty("--rx", `${(0.5 - ny) * 16}deg`);
+    card.style.setProperty("--hx", (nx - 0.5).toFixed(3));
+    card.style.setProperty("--hy", (ny - 0.5).toFixed(3));
     setRole(Math.min(roles.length - 1, Math.floor(nx * roles.length)));
   };
   const rest = () => {
@@ -194,8 +197,9 @@
     return { el, video, data: w, ratio };
   });
 
-  // одновременно играют только ролики на экране, лишние ставятся на паузу
-  const maxPlaying = fine ? 4 : 2;
+  // живой один ролик: под курсором или последний появившийся. Браузер снижает частоту кадров
+  // всей страницы, как только видео играет больше одного, и скролл становится рваным
+  const maxPlaying = 1;
   const playing = [];
   const seen = new IntersectionObserver((entries) => {
     entries.forEach(({ target, isIntersecting }) => {
@@ -212,6 +216,14 @@
     });
   }, { threshold: 0.35 });
   tiles.forEach((t) => seen.observe(t.video));
+  const promote = (video) => {
+    if (playing.includes(video)) return;
+    playing.splice(0).forEach((v) => v.pause());
+    if (!video.src && video.dataset.src) video.src = video.dataset.src;
+    playing.push(video);
+    video.play().catch(() => {});
+  };
+  if (fine) tiles.forEach((t) => t.el.addEventListener("pointerenter", () => promote(t.video)));
   // постеры подгружаем заранее, но не всей пачкой при открытии
   const near = new IntersectionObserver((entries) => {
     entries.forEach(({ target, isIntersecting }) => {
@@ -221,6 +233,18 @@
     });
   }, { rootMargin: "120% 0px" });
   tiles.forEach((t) => near.observe(t.video));
+  // на телефоне ролики далеко от экрана выгружаются из памяти
+  if (!fine) {
+    const far = new IntersectionObserver((entries) => {
+      entries.forEach(({ target, isIntersecting }) => {
+        if (isIntersecting || !target.getAttribute("src")) return;
+        target.pause();
+        target.removeAttribute("src");
+        target.load();
+      });
+    }, { rootMargin: "250% 0px" });
+    tiles.forEach((t) => far.observe(t.video));
+  }
   $$("video[data-auto]").forEach((v) => seen.observe(v));
 
   /* раскладка коллажем: колонки разной ширины, небольшой разброс */
@@ -257,6 +281,13 @@
     layoutBoard();
   });
 
+  // пока открыт просмотр работы, страница под ним не тратит ресурсы
+  const holds = window.SITE.holds = [];
+  const setHold = (on) => {
+    holds.forEach((fn) => fn(on));
+    playing.forEach((v) => (on ? v.pause() : v.play().catch(() => {})));
+  };
+
   const lightbox = $(".lightbox");
   const lightVideo = $("video", lightbox);
   const lightCap = $(".lightbox__cap");
@@ -268,7 +299,7 @@
     lightVideo.loop = false;
     lightVideo.controls = true;
     lightCap.innerHTML = cap;
-    if (!lightbox.open) lightbox.showModal();
+    if (!lightbox.open) { lightbox.showModal(); setHold(true); }
     lenis && lenis.stop();
     lightVideo.play().catch(() => {});
   };
@@ -279,7 +310,7 @@
     place = (place + by + queue.length) % queue.length;
     showTile(queue[place]);
   };
-  lightbox.addEventListener("close", () => { place = -1; lightbox.classList.remove("has-nav"); lightVideo.pause(); lightVideo.removeAttribute("src"); lightVideo.load(); lenis && lenis.start(); });
+  lightbox.addEventListener("close", () => { place = -1; lightbox.classList.remove("has-nav"); lightVideo.onerror = null; lightVideo.pause(); lightVideo.removeAttribute("src"); lightVideo.load(); lenis && lenis.start(); setHold(false); });
   $(".lightbox__close").addEventListener("click", closeLight);
   lightbox.addEventListener("click", (e) => { if (e.target === lightbox) closeLight(); });
   $$("[data-reel]").forEach((b) => b.addEventListener("click", () => openLight("assets/video/showreel.mp4", "assets/poster/me_daisy.jpg", I18N.t("reel.cap", "шоурил JDROBYSHEV, 1:30"))));
@@ -301,6 +332,17 @@
   window.SITE.openWork = (id) => { const t = tiles.find((x) => x.data.id === id); if (t) openTile(t); };
   $(".lightbox__nav--prev").addEventListener("click", () => step(-1));
   $(".lightbox__nav--next").addEventListener("click", () => step(1));
+  // колесо листает работы, а не сайт под ними. Хвост инерции тачпада за новый жест не считается
+  let wheelLast = 0, wheelFlip = 0;
+  lightbox.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const delta = e.deltaY || e.deltaX;
+    const fresh = e.timeStamp - wheelLast > 160;
+    wheelLast = e.timeStamp;
+    if (!delta || place < 0 || !(fresh || e.timeStamp - wheelFlip > 1100)) return;
+    wheelFlip = e.timeStamp;
+    step(Math.sign(delta));
+  }, { passive: false });
   lightbox.addEventListener("keydown", (e) => {
     if (e.key === "ArrowLeft") { e.preventDefault(); step(-1); }
     if (e.key === "ArrowRight") { e.preventDefault(); step(1); }
@@ -391,7 +433,7 @@
     });
     $$(".services__list li").forEach((li) => {
       li.addEventListener("pointerenter", () => {
-        const src = `assets/video/${li.dataset.preview}.mp4`;
+        const src = `assets/video/t/${li.dataset.preview}.mp4`;
         if (!floatVideo.src.endsWith(src)) floatVideo.src = src;
         floatVideo.play().catch(() => {});
         float.classList.add("is-on");
