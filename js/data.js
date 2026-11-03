@@ -1,13 +1,13 @@
 window.SITE = {
+  // первый экран: открывает полёт, дальше только реклама брендов (пользователь, 03.11.2026)
   SCENES: [
     { id: "me_fly",    lora: "jdrobyshev_v7", seed: "2280", tag: "jdrobyshev 98 %",      subject: "man in a black suit, flying", scene: "liquid chrome above the clouds", camera: "orbit, 35mm" },
-    { id: "w_oakley",  lora: "oakley_goggles_v3", seed: "1997", tag: "",                subject: "motocross goggles", scene: "desert sunset, sand in the air", camera: "macro, 100mm" },
-    { id: "w_zepro",   lora: "zepro_oil_v2", seed: "4120", tag: "",                subject: "golden motor oil", scene: "assembles into a race engine", camera: "black studio, 50mm" },
-    { id: "me_sponge", lora: "jdrobyshev_v7", seed: "7070", tag: "jdrobyshev 97 %",      subject: "white shirt, red tie, brown shorts", scene: "rides a jellyfish over Haifa", camera: "drone, 24mm" },
     { id: "w_ikar",    lora: "ikar_ice_v4", seed: "1133", tag: "",                subject: "hockey puck on ice", scene: "arena holds its breath", camera: "slow motion, 1000 fps" },
-    { id: "me_boar",   lora: "jdrobyshev_v7", seed: "2024", tag: "jdrobyshev 96 %",      subject: "rider on a wild boar", scene: "Bahai Gardens, Haifa", camera: "tracking, 35mm" },
+    { id: "w_juice",   lora: "juice_splash_v2", seed: "5150", tag: "",            subject: "juice bottle in hand", scene: "strawberry milk wave, orange slice corridor", camera: "low dolly, 35mm" },
+    { id: "w_zepro",   lora: "zepro_oil_v2", seed: "4120", tag: "",                subject: "golden motor oil", scene: "assembles into a race engine", camera: "black studio, 50mm" },
+    { id: "w_ert",     lora: "ertelecom_net_v3", seed: "8800", tag: "",           subject: "fiber light network", scene: "wraps the globe over Russia", camera: "orbit, open space" },
     { id: "w_laba",    lora: "laba_bottle_v2", seed: "3030", tag: "",                subject: "glass bottle, linen", scene: "morning sun, sea breeze", camera: "product, 85mm" },
-    { id: "me_daisy",  lora: "jdrobyshev_v7", seed: "1208", tag: "jdrobyshev 99 %",     subject: "man in black", scene: "walks a daisy petal big as a house", camera: "wide, 24mm" }
+    { id: "w_dm",      lora: "detmir_toys_v2", seed: "3141", tag: "",             subject: "girl in headphones", scene: "toy bricks build a crown", camera: "push in, 50mm" }
   ],
   ROLES: [
     { id: "me_fly", role: "ЛЕЧУ", role_en: "FLYING" }, { id: "me_sponge", role: "СПАНЧ БОБ", role_en: "SPONGEBOB" }, { id: "me_boar", role: "НА КАБАНЕ", role_en: "ON A BOAR" },
