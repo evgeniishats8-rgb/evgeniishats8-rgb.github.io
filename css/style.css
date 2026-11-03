@@ -355,7 +355,7 @@ html[data-theme="light"] .brief__go{color:#fff}
   .brief__steps span:not(.is-now),.brief__steps i{display:none}
   .brief__go{flex:1 0 100%;text-align:center}
   .preview__foot{padding:6px}
-  .preview__want{flex:1;justify-content:center;padding:11px 14px}
+  .preview__want{flex:1;justify-content:center;padding:10px 14px}
 }
 @media (pointer:coarse){.brief__chip{min-height:44px}}
 @media (prefers-reduced-motion:reduce){.brief[open] .brief__box,.brief[open] .brief__box::after,.brief__body.is-in,.preview__want::after{animation:none}}
@@ -371,7 +371,7 @@ html[data-theme="light"] .brief__go{color:#fff}
 }
 @media (max-width:820px){
   .nav__links a[href="#services"],.nav__links a[href="#works"]{display:none}
-  .hero__stage{padding-top:40px;grid-template-columns:1fr 1fr;grid-template-rows:auto minmax(0,1fr) auto auto auto;gap:8px}
+  .hero__stage{padding-top:40px;grid-template-columns:1fr 1fr;grid-template-rows:auto minmax(min-content,1fr) auto auto auto;gap:8px}
   .node--note{grid-column:1/-1;grid-row:1}
   .node--note h1{font-size:clamp(23px,6.4vw,32px);padding:8px 10px 2px}
   .node--note p{padding:0 10px 8px}
@@ -416,6 +416,10 @@ html[data-theme="light"] .brief__go{color:#fff}
   .hint-fine{display:none}.hint-touch{display:inline}
 }
 @media (hover:none){.hint-fine{display:none}.hint-touch{display:inline}.services__float{display:none}}
+/* на телефоне работа в Preview не меньше широкого кадра: на невысоком экране место ей уступает нода Soft Body */
+@media (max-width:820px){.node--preview .preview{min-height:42vw}}
+@media (max-width:820px) and (max-height:760px){.node--vae{display:none}}
+@media (max-width:820px) and (max-height:620px){.node--lora,.node--sampler{display:none}}
 /* на узком телефоне резюме остаётся в карточке и в подвале, а в шапке место кнопке заказа */
 @media (max-width:440px){.nav__links a[href="#blender"],.nav__links .nav__cv{display:none}.nav__links{gap:12px}}
 /* смена темы: цвета перетекают, а не щёлкают */

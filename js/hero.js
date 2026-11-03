@@ -796,7 +796,8 @@
     const loop = (now) => {
       requestAnimationFrame(loop);
       const video = live.video;
-      if (!video || !stageVisible || document.hidden || video.readyState < 2) return;
+      // на низком телефоне нода LoRA скрыта, тогда кадр в неё не грузится
+      if (!video || !stageVisible || document.hidden || video.readyState < 2 || !c.clientWidth) return;
       const every = quality.level === 0 ? 66 : quality.level === 1 ? 110 : 220;
       if (video.currentTime !== last && now - (loop.at || 0) > every) {
         last = video.currentTime; loop.at = now;
