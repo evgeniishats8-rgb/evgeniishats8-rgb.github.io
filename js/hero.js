@@ -425,14 +425,17 @@
     });
   }
 
-  /* схематичная модель того, что сейчас в Preview: блоки по позе человека или по форме предмета */
+  /* десять блоков живут постоянно и перетекают: поза в позу, человек в предмет, сцена в сцену */
   function startRig() {
     const c = $(".rig__canvas");
     const g = c.getContext("2d");
     const nameEl = $(".rig__name"), noteEl = $(".rig__note");
-    const SPINE = 7;
-    let rigs = null, W2 = 0, H2 = 0, dpr2 = 1;
-    const fit = { x: 0.5, y: 0.5, w: 0.3, h: 0.3, ready: false };
+    const COUNT = 10, SPINE = 7;
+    let rigs = null, W2 = 0, H2 = 0, dpr2 = 1, last = 0;
+    const fit = { x: 0.5, y: 0.5, w: 0.3, h: 0.3 };
+    // у каждого блока четыре угла, они всегда плывут к текущей цели
+    const blocks = Array.from({ length: COUNT }, () => Array.from({ length: 4 }, () => [0, 0]));
+    let placed = false;
     const size = () => {
       dpr2 = Math.min(devicePixelRatio || 1, 2);
       W2 = c.clientWidth; H2 = c.clientHeight;
@@ -441,6 +444,7 @@
     new ResizeObserver(size).observe(c);
     size();
     window.SITE.getJson("assets/data/rigs.json").then((d) => { rigs = d; }).catch(() => {});
+
     const blend = (rig, t) => {
       const n = rig.pts.length;
       const a = Math.floor(t) % n, b = (a + 1) % n;
@@ -450,76 +454,92 @@
       const f = t - Math.floor(t);
       return { pts: pa.map((v, i) => v + (pb[i] - v) * f), kind: rig.kinds[a] };
     };
-    const loop = (now) => {
-      requestAnimationFrame(loop);
-      if (!rigs || !W2 || !stageVisible || document.hidden || !live.video) return;
-      if (now - (loop.at || 0) < (quality.level ? 66 : 33)) return;
-      loop.at = now;
-      const rig = rigs[live.id];
-      g.setTransform(dpr2, 0, 0, dpr2, 0, 0);
-      g.clearRect(0, 0, W2, H2);
-      if (!rig) return;
-      const pose = live.d < 0.35 ? null : blend(rig, live.video.currentTime * rig.fps);
-      nameEl.textContent = pose ? (pose.kind === "h" ? "HUMAN_BLOCK" : "OBJECT_BLOCK") : "";
-      if (!pose) { noteEl.textContent = ""; return; }
-      const vw = live.video.videoWidth || 1920, vh = live.video.videoHeight || 824;
+    // пока идёт шум, блоки собираются в аккуратную стопку и ждут новую форму
+    const stack = (time) => Array.from({ length: COUNT }, (_, i) => {
+      const side = Math.min(W2, H2) * 0.17;
+      const col = i % 5, row = Math.floor(i / 5);
+      const x = W2 / 2 + (col - 2) * side * 1.22 + Math.sin(time * 0.9 + i) * 2;
+      const y = H2 / 2 + (row - 0.5) * side * 1.22 + Math.cos(time * 0.7 + i) * 2;
+      const r = side / 2;
+      return [[x - r, y - r], [x + r, y - r], [x + r, y + r], [x - r, y + r]];
+    });
+    const targets = (pose, vw, vh) => {
       let x0 = 1, x1 = 0, y0 = 1, y1 = 0;
       for (let i = 0; i < pose.pts.length; i += 2) {
         x0 = Math.min(x0, pose.pts[i]); x1 = Math.max(x1, pose.pts[i]);
         y0 = Math.min(y0, pose.pts[i + 1]); y1 = Math.max(y1, pose.pts[i + 1]);
       }
-      // рамка модели меняется плавно, иначе блоки дёргаются вместе с позой
-      const k = fit.ready ? 0.12 : 1;
-      fit.x += ((x0 + x1) / 2 - fit.x) * k; fit.y += ((y0 + y1) / 2 - fit.y) * k;
-      fit.w += ((x1 - x0) - fit.w) * k; fit.h += ((y1 - y0) - fit.h) * k;
-      fit.ready = true;
+      fit.x += ((x0 + x1) / 2 - fit.x) * 0.08; fit.y += ((y0 + y1) / 2 - fit.y) * 0.08;
+      fit.w += ((x1 - x0) - fit.w) * 0.08; fit.h += ((y1 - y0) - fit.h) * 0.08;
       const s = Math.min((W2 - 40) / (Math.max(fit.w, 0.05) * vw), (H2 - 40) / (Math.max(fit.h, 0.05) * vh));
       const ox = W2 / 2 - fit.x * vw * s - 3, oy = H2 / 2 - fit.y * vh * s + 2;
       const px = (i) => ox + pose.pts[i * 2] * vw * s, py = (i) => oy + pose.pts[i * 2 + 1] * vh * s;
-      // кубик из четырёх углов и глубины: глубина плавно ходит, поэтому блоки выглядят объёмными
+      if (pose.kind === "h") {
+        const bar = (p, q, w) => {
+          const ax = px(p), ay = py(p), bx = px(q), by = py(q);
+          const len = Math.hypot(bx - ax, by - ay) || 1;
+          const nx = (-(by - ay) / len) * w / 2, ny = ((bx - ax) / len) * w / 2;
+          return [[ax + nx, ay + ny], [bx + nx, by + ny], [bx - nx, by - ny], [ax - nx, ay - ny]];
+        };
+        const shoulder = Math.max(5, Math.hypot(px(1) - px(2), py(1) - py(2)));
+        const limb = Math.max(2.5, shoulder * 0.3);
+        const hx = px(0), hy = py(0), r = shoulder * 0.34;
+        return [
+          bar(7, 9, limb), bar(8, 10, limb), bar(9, 11, limb * 0.8), bar(10, 12, limb * 0.8),
+          [[px(1), py(1)], [px(2), py(2)], [px(8), py(8)], [px(7), py(7)]],
+          [[hx - r, hy - r], [hx + r, hy - r], [hx + r, hy + r], [hx - r, hy + r]],
+          bar(1, 3, limb), bar(2, 4, limb), bar(3, 5, limb * 0.8), bar(4, 6, limb * 0.8),
+        ];
+      }
+      // предмет: те же десять блоков вдоль формы
+      const rail = (start, t) => {
+        const f = t * (SPINE - 1), i = Math.min(SPINE - 2, Math.floor(f)), k = f - i;
+        return [px(start + i) + (px(start + i + 1) - px(start + i)) * k, py(start + i) + (py(start + i + 1) - py(start + i)) * k];
+      };
+      return Array.from({ length: COUNT }, (_, i) => {
+        const a = (i + 0.08) / COUNT, b = (i + 0.92) / COUNT;
+        return [rail(SPINE, a), rail(SPINE, b), rail(SPINE * 2, b), rail(SPINE * 2, a)];
+      });
+    };
+    const loop = (now) => {
+      requestAnimationFrame(loop);
+      if (!W2 || !stageVisible || document.hidden || !live.video) { last = now; return; }
+      if (quality.level > 1 && now - (loop.at || 0) < 33) return;
+      loop.at = now;
+      const dt = Math.min(60, now - last || 16); last = now;
+      const time = now / 1000;
+      const rig = rigs && rigs[live.id];
+      const pose = rig && live.d >= 0.35 ? blend(rig, live.video.currentTime * rig.fps) : null;
+      const vw = live.video.videoWidth || 1920, vh = live.video.videoHeight || 824;
+      const goal = pose ? targets(pose, vw, vh) : stack(time);
+      if (!placed) { goal.forEach((b, i) => b.forEach((p, k) => { blocks[i][k][0] = p[0]; blocks[i][k][1] = p[1]; })); placed = true; }
+      // плавное течение к цели: на смене плана блоки не прыгают, а перестраиваются
+      const follow = 1 - Math.exp(-dt / 150);
+      blocks.forEach((b, i) => b.forEach((p, k) => {
+        p[0] += (goal[i][k][0] - p[0]) * follow;
+        p[1] += (goal[i][k][1] - p[1]) * follow;
+      }));
+      nameEl.textContent = pose ? (pose.kind === "h" ? "HUMAN_BLOCK" : "OBJECT_BLOCK") : "ASSEMBLING";
+      noteEl.textContent = `boxes ${COUNT} · cameras 0`;
       const turn = now / 1700;
-      const depth = { x: Math.sin(turn) * 8, y: -5 - Math.cos(turn) * 1.5 };
-      const cube = (c) => {
-        const back = c.map(([x, y]) => [x + depth.x, y + depth.y]);
-        const path = (q) => { g.beginPath(); q.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); };
+      const dx = Math.sin(turn) * 8, dy = -5 - Math.cos(turn) * 1.5;
+      g.setTransform(dpr2, 0, 0, dpr2, 0, 0);
+      g.clearRect(0, 0, W2, H2);
+      g.lineWidth = 1;
+      const path = (q) => { g.beginPath(); q.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); };
+      blocks.forEach((face) => {
+        const back = face.map(([x, y]) => [x + dx, y + dy]);
         path(back); g.strokeStyle = "rgba(143,214,255,.3)"; g.stroke();
-        c.forEach((p, i) => {
+        face.forEach((p, i) => {
           const n = (i + 1) % 4;
-          path([p, c[n], back[n], back[i]]);
+          path([p, face[n], back[n], back[i]]);
           g.fillStyle = "rgba(143,214,255,.07)"; g.fill();
           g.strokeStyle = "rgba(143,214,255,.45)"; g.stroke();
         });
-        path(c); g.fillStyle = "rgba(15,16,19,.86)"; g.fill();
+        path(face); g.fillStyle = "rgba(15,16,19,.86)"; g.fill();
         g.fillStyle = "rgba(143,214,255,.13)"; g.fill();
         g.strokeStyle = "#8fd6ff"; g.stroke();
-      };
-      const bar = (p, q, w) => {
-        const x0 = px(p), y0 = py(p), x1 = px(q), y1 = py(q);
-        const len = Math.hypot(x1 - x0, y1 - y0) || 1;
-        const nx = (-(y1 - y0) / len) * w / 2, ny = ((x1 - x0) / len) * w / 2;
-        return [[x0 + nx, y0 + ny], [x1 + nx, y1 + ny], [x1 - nx, y1 - ny], [x0 - nx, y0 - ny]];
-      };
-      const boxes = [];
-      if (pose.kind === "h") {
-        const shoulder = Math.max(5, Math.hypot(px(1) - px(2), py(1) - py(2)));
-        const limb = Math.max(2.5, shoulder * 0.3);
-        boxes.push(bar(7, 9, limb), bar(8, 10, limb), bar(9, 11, limb * 0.8), bar(10, 12, limb * 0.8));
-        boxes.push([[px(1), py(1)], [px(2), py(2)], [px(8), py(8)], [px(7), py(7)]]);
-        const hx = px(0), hy = py(0), r = shoulder * 0.34;
-        boxes.push([[hx - r, hy - r], [hx + r, hy - r], [hx + r, hy + r], [hx - r, hy + r]]);
-        boxes.push(bar(1, 3, limb), bar(2, 4, limb), bar(3, 5, limb * 0.8), bar(4, 6, limb * 0.8));
-      } else {
-        for (let i = 0; i < SPINE - 1; i++) {
-          const gap = 0.08;
-          const mix = (a, b, t) => [px(a) + (px(b) - px(a)) * t, py(a) + (py(b) - py(a)) * t];
-          boxes.push([mix(SPINE + i, SPINE + i + 1, gap), mix(SPINE + i + 1, SPINE + i, gap), mix(SPINE * 2 + i + 1, SPINE * 2 + i, gap), mix(SPINE * 2 + i, SPINE * 2 + i + 1, gap)]);
-        }
-      }
-      noteEl.textContent = `boxes ${boxes.length} · cameras 0`;
-      g.globalAlpha = Math.min(1, (live.d - 0.35) * 3);
-      g.lineWidth = 1;
-      boxes.forEach(cube);
-      g.globalAlpha = 1;
+      });
     };
     requestAnimationFrame(loop);
   }
