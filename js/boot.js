@@ -21,5 +21,20 @@
     if (e.target.closest("video, img, canvas")) e.preventDefault();
   });
 
+  // ролик, оборвавшийся при смене сети, загружается заново
+  const retries = new WeakMap();
+  document.addEventListener("error", (e) => {
+    const video = e.target;
+    if (video.tagName !== "VIDEO" || !video.getAttribute("src")) return;
+    const count = retries.get(video) || 0;
+    if (count >= 3 || video.onerror) return;
+    retries.set(video, count + 1);
+    const wasPlaying = !video.paused;
+    setTimeout(() => {
+      video.load();
+      if (wasPlaying || video.closest(".hero__src, .bl__view")) video.play().catch(() => {});
+    }, 1200 * (count + 1));
+  }, true);
+
   I18N.apply();
 })();

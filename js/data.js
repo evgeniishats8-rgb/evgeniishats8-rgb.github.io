@@ -51,3 +51,15 @@ window.SITE = {
   CLIENTS: ["ИКАР", "Эр-Телеком", "Дом.ру", "ЛАБА", "VK", "MAX", "Legal Unity"],
   CLIENTS_EN: ["IKAR", "ER-Telecom", "Dom.ru", "LABA", "VK", "MAX", "Legal Unity"],
 };
+
+/* загрузка данных с повтором: короткий обрыв сети не должен оставлять блок пустым */
+window.SITE.getJson = async (url, tries = 4) => {
+  for (let n = 0; n < tries; n++) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) return await response.json();
+    } catch (e) { /* следующая попытка ниже */ }
+    await new Promise((done) => setTimeout(done, 700 * (n + 1)));
+  }
+  throw new Error(`не загрузилось: ${url}`);
+};

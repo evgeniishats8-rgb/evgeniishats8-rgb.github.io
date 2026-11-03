@@ -255,7 +255,7 @@
   });
 
   let tracks = {};
-  fetch("assets/data/tracks.json").then((r) => r.json()).then((d) => { tracks = d; }).catch(() => {});
+  window.SITE.getJson("assets/data/tracks.json").then((d) => { tracks = d; }).catch(() => {});
 
   const coverOf = (video, id) => {
     const vw = video.videoWidth || 1920, vh = video.videoHeight || 824;
@@ -440,7 +440,7 @@
     };
     new ResizeObserver(size).observe(c);
     size();
-    fetch("assets/data/rigs.json").then((r) => r.json()).then((d) => { rigs = d; }).catch(() => {});
+    window.SITE.getJson("assets/data/rigs.json").then((d) => { rigs = d; }).catch(() => {});
     const blend = (rig, t) => {
       const n = rig.pts.length;
       const a = Math.floor(t) % n, b = (a + 1) % n;

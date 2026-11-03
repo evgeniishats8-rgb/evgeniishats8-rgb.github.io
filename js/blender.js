@@ -38,7 +38,7 @@
   new ResizeObserver(size).observe(view);
   size();
 
-  const loadData = () => fetch("assets/data/mule.json").then((r) => r.json()).then((d) => {
+  const loadData = () => window.SITE.getJson("assets/data/mule.json").then((d) => {
     data = d;
     const tris = (d.stats.tris / 1e6).toFixed(1);
     $(".bl__stats").innerHTML = [["objects", d.stats.objects], ["parts", d.stats.parts], ["bones", d.stats.bones], ["tris", `${tris} M`]]
