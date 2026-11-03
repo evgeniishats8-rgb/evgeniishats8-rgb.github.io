@@ -143,8 +143,8 @@
     writeLog(i, step, speed);
   };
 
-  /* кадр стоит HOLD, затем за FLOW перетекает в следующий: старый чуть приближается, новый садится на место */
-  const HOLD = 4000, FLOW = 1800, PATIENCE = 3000;
+  /* кадр стоит HOLD, затем за FLOW перетекает в следующий через голограмму */
+  const HOLD = 4000, FLOW = 2000, PATIENCE = 3000;
   const state = { i: 0, restAt: 0, inView: true, held: false, active: true };
   const flow = { on: false, from: 0, to: 0, at: 0, warm: false };
   const nextOf = (i) => (i + 1) % SCENES.length;
@@ -222,8 +222,10 @@
     return;
   }
 
-  /* Preview: кадр рисуется одним слоем. На смене сцены старый кадр чуть приближается и растворяется,
-     новый садится на место, светлые места нового проявляются немного раньше. */
+  /* Preview: кадр рисуется одним слоем. На смене сцены кадр плавно уходит в голограмму: голубой по яркости,
+     строки развёртки, лёгкий сдвиг каналов и волна по строкам. Сквозь неё старый кадр приближается
+     и растворяется, новый садится на место, светлые места нового проявляются раньше. Голограмма
+     сильнее всего в середине перехода, потом гаснет, и новый кадр наливается цветом. */
   const quadVs = `#version 300 es
     in vec2 p; out vec2 vUv;
     void main() { vUv = vec2(p.x * .5 + .5, .5 - p.y * .5); gl_Position = vec4(p, 0., 1.); }`;
@@ -232,16 +234,26 @@
     in vec2 vUv; out vec4 outColor;
     uniform sampler2D uA, uB;
     uniform vec4 uCoverA, uCoverB;
-    uniform float uMix, uFade;
-    vec3 tap(sampler2D t, vec4 c, float zoom) {
-      vec2 q = (vUv - .5) / zoom + .5;
-      return texture(t, q * c.xy + c.zw).rgb;
+    uniform float uMix, uFade, uTime, uLines;
+    const vec3 INK = vec3(.56, .84, 1.);
+    const vec3 LUMA = vec3(.3, .59, .11);
+    vec3 tap(sampler2D t, vec4 c, vec2 uv, float zoom, float split) {
+      vec2 q = (uv - .5) / zoom + .5, o = vec2(split, 0.);
+      if (split == 0.) return texture(t, q * c.xy + c.zw).rgb;
+      return vec3(texture(t, (q + o) * c.xy + c.zw).r, texture(t, q * c.xy + c.zw).g, texture(t, (q - o) * c.xy + c.zw).b);
     }
     void main() {
-      vec3 a = tap(uA, uCoverA, 1. + uMix * .06);
-      vec3 b = tap(uB, uCoverB, 1.06 - uMix * .06);
-      float k = smoothstep(0., 1., clamp(uMix * 1.35 - dot(b, vec3(.3, .59, .11)) * .35, 0., 1.));
-      outColor = vec4(mix(a, b, k) * uFade, 1.);
+      float h = sin(3.14159265 * uMix);
+      vec2 uv = vUv + vec2(h * .0022 * sin(vUv.y * uLines * .35 + uTime * 4.), 0.);
+      vec3 a = tap(uA, uCoverA, uv, 1. + uMix * .06, h * .004);
+      vec3 b = tap(uB, uCoverB, uv, 1.06 - uMix * .06, h * .004);
+      float k = smoothstep(0., 1., clamp(uMix * 1.35 - dot(b, LUMA) * .35, 0., 1.));
+      vec3 c = mix(a, b, k);
+      float l = dot(c, LUMA);
+      c = mix(c, INK * (l * 1.3 + l * l * .4 + .05), h * .8);
+      c *= 1. - h * .3 * (.5 + .5 * sin(vUv.y * uLines * 6.2832 - uTime * 6.));
+      c += INK * h * .05 * (.5 + .5 * sin(vUv.y * 5. - uTime * 1.5));
+      outColor = vec4(c * uFade, 1.);
     }`;
 
   const compile = (type, src) => {
@@ -260,7 +272,7 @@
     names.forEach((n) => { u[n] = gl.getUniformLocation(program, n); });
     return u;
   };
-  const quad = makeProgram(quadVs, quadFs, ["uA", "uB", "uCoverA", "uCoverB", "uMix", "uFade"]);
+  const quad = makeProgram(quadVs, quadFs, ["uA", "uB", "uCoverA", "uCoverB", "uMix", "uFade", "uTime", "uLines"]);
 
   const quadVao = gl.createVertexArray();
   gl.bindVertexArray(quadVao);
@@ -403,6 +415,9 @@
     gl.uniform4f(quad.uCoverB, coverB.sx, coverB.sy, coverB.ox, coverB.oy);
     gl.uniform1f(quad.uMix, mix);
     gl.uniform1f(quad.uFade, fade);
+    gl.uniform1f(quad.uTime, time);
+    // строка развёртки каждые 3 px экрана при любой плотности пикселей, волна по строкам раз в 54 px
+    gl.uniform1f(quad.uLines, H / 3);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
     updateNumbers(state.i, d);
