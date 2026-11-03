@@ -24,7 +24,13 @@
     else $(target).scrollIntoView();
   };
   window.SITE.glide = glide;
-  $$('a[href^="#"]').forEach((a) => a.addEventListener("click", (e) => { e.preventDefault(); glide(a.getAttribute("href")); }));
+  // ссылки почты получают mailto позже, в boot.js, поэтому адрес проверяется в момент клика
+  $$('a[href^="#"]').forEach((a) => a.addEventListener("click", (e) => {
+    const href = a.getAttribute("href");
+    if (!href.startsWith("#")) return;
+    e.preventDefault();
+    glide(href);
+  }));
 
   /* шапка показывает текущий раздел */
   const navLinks = $$(".nav__links a");
@@ -307,6 +313,8 @@
     holds.forEach((fn) => fn(on));
     playing.forEach((v) => (on ? v.pause() : v.play().catch(() => {})));
   };
+  // окно брифа, как и просмотр, ставит страницу под собой на паузу
+  window.SITE.modal = (on) => { setHold(on); lenis && (on ? lenis.stop() : lenis.start()); };
 
   const lightbox = $(".lightbox");
   const lightVideo = $("video", lightbox);

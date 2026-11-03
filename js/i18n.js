@@ -1,7 +1,7 @@
 /* Русский и английский. Тексты короткие, поэтому хватает словаря по ключам. */
 (() => {
   const EN = {
-    "nav.works": "work", "nav.services": "services", "nav.reel": "reel", "nav.contact": "contact",
+    "nav.works": "work", "nav.services": "services", "nav.reel": "reel", "nav.contact": "contact", "nav.order": "hire", "end.brief": "one-minute brief",
     "hero.title": "No cameras were harmed", "hero.who": "evgenii shats, ai creator",
     "hero.hint": "auto queue, scroll for works",
     "hero.neg": "camera, tripod, film crew, location fee",

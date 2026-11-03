@@ -33,7 +33,7 @@
     <a href="#services" data-i18n="nav.services">услуги</a>
     <button type="button" data-reel data-i18n="nav.reel">шоурил</button>
     <a class="nav__cv" href="assets/cv/Evgenii_Shats_CV_RU.pdf" target="_blank" rel="noopener" data-i18n="nav.cv">резюме</a>
-    <a href="#contact" data-i18n="nav.contact">написать</a>
+    <button type="button" data-brief data-i18n="nav.order">заказать</button>
     <button type="button" data-theme-toggle aria-label="Light or dark theme">light</button>
     <button type="button" data-lang aria-label="Language">en</button>
   </nav>
@@ -138,6 +138,7 @@
             <p class="card__found" data-i18n="card.found">Нашёл? Напиши.</p>
             <ul class="card__links">
               <li><a data-mail href="#contact">email</a></li>
+              <li><a href="https://t.me/jdrobyshev" target="_blank" rel="noopener">telegram @jdrobyshev</a></li>
               <li><a href="https://www.instagram.com/jdrobyshev/" target="_blank" rel="noopener">instagram @jdrobyshev</a></li>
               <li><a href="assets/cv/Evgenii_Shats_CV_RU.pdf" target="_blank" rel="noopener" data-i18n="card.cv">резюме, pdf</a></li>
             </ul>
@@ -247,12 +248,14 @@ master = timeline.render(fps=<em>24</em>, lufs=<em>-14</em>, cameras=<em>0</em>)
 
   <footer class="end" id="contact">
     <p class="end__big" data-i18n="end.title">Следующий seed твой</p>
+    <button type="button" class="end__brief" data-brief><span data-i18n="end.brief">бриф за минуту</span> <span>→</span></button>
     <div class="end__row">
       <div class="end__contact">
         <a class="end__mail" data-mail href="#contact">email</a>
         <button type="button" class="end__copy" data-i18n="end.copy">скопировать</button>
       </div>
       <ul>
+        <li><a href="https://t.me/jdrobyshev" target="_blank" rel="noopener">telegram</a></li>
         <li><a href="https://www.instagram.com/jdrobyshev/" target="_blank" rel="noopener">instagram</a></li>
         <li><a href="https://www.tiktok.com/@jdrobysh" target="_blank" rel="noopener">tiktok</a></li>
         <li><a href="assets/cv/Evgenii_Shats_CV_RU.pdf" target="_blank" rel="noopener" data-i18n="end.cv">резюме, pdf</a></li>
@@ -275,6 +278,14 @@ master = timeline.render(fps=<em>24</em>, lufs=<em>-14</em>, cameras=<em>0</em>)
   <p class="lightbox__cap"></p>
 </dialog>
 
+<dialog class="brief" aria-labelledby="brief-title" data-lenis-prevent>
+  <div class="brief__box">
+    <header class="node__bar brief__bar"><span class="brief__name">Бриф</span><span class="brief__steps"></span><button type="button" class="brief__close">закрыть</button></header>
+    <div class="brief__body"></div>
+    <footer class="brief__foot"></footer>
+  </div>
+</dialog>
+
 <script src="js/i18n.js"></script>
 <script src="assets/vendor/gsap.min.js"></script>
 <script src="assets/vendor/ScrollTrigger.min.js"></script>
@@ -284,6 +295,7 @@ master = timeline.render(fps=<em>24</em>, lufs=<em>-14</em>, cameras=<em>0</em>)
 <script src="js/main.js"></script>
 <script src="js/hero.js"></script>
 <script src="js/blender.js"></script>
+<script src="js/brief.js"></script>
 <script src="js/boot.js"></script>
 </body>
 </html>
