@@ -242,6 +242,7 @@ video,img{display:block;max-width:100%}
 .end__copy{font:400 12px Mono,monospace;color:#55534e}
 .end__copy:hover{color:#141416}
 .end__row li a:hover{color:#141416}
+.end__legal{margin-bottom:clamp(14px,2vw,24px);font:400 11px/1.5 Mono,monospace;color:#6f6d67}
 .end__word{font-size:13vw;font-stretch:151%;font-weight:240;letter-spacing:-.03em;line-height:.9;white-space:nowrap;margin-left:-.04em}
 .end__word sup{font:400 .1em Mono,monospace;vertical-align:top;letter-spacing:0}
 

@@ -1,0 +1,5 @@
+Copyright (c) 2026 Evgenii Shats (JDROBYSHEV). All rights reserved.
+
+All videos, images, 3D data, text and code on this site are the property of the author.
+No part of this site may be copied, reused, redistributed or used to train AI models
+without prior written permission.

@@ -315,10 +315,10 @@
   const copy = $(".end__copy");
   copy.addEventListener("click", async () => {
     try {
-      await navigator.clipboard.writeText("evgeniishats8@gmail.com");
+      await navigator.clipboard.writeText(window.SITE.mail);
       copy.textContent = I18N.t("end.copied", "скопировано");
       setTimeout(() => { copy.textContent = I18N.t("end.copy", "скопировать"); }, 1600);
-    } catch (e) { location.href = "mailto:evgeniishats8@gmail.com"; }
+    } catch (e) { location.href = `mailto:${window.SITE.mail}`; }
   });
 
   /* ноды конвейера можно потянуть, они мягко возвращаются на место */
