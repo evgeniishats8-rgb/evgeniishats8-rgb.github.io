@@ -158,7 +158,7 @@
     const a = band.a * W, b = band.b * W;
     const f = fit();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.imageSmoothingQuality = "high";
+    ctx.imageSmoothingQuality = "medium";
     drawPass("wire", 0, a, f);
     drawPass("rig", a, b, f);
     drawPass("render", b, W, f);

@@ -41,30 +41,65 @@
   const portrait = new Image();
   let portraitData = null;
   const pointer = { x: -999, y: -999 };
-  const drawDots = () => {
+  // статичный слой рисуется один раз, от курсора обновляется только маленький участок
+  let dotLayer = null, dotStep = 11, dotFit = 1, dotX = 0, dotY = 0, dotW = 0, dotH = 0, lastSpot = null;
+  const dotDpr = Math.min(devicePixelRatio, 1.5);
+  const lumAt = (x, y) => {
+    const px = Math.floor((x - dotX) / dotFit), py = Math.floor((y - dotY) / dotFit);
+    if (px < 0 || py < 0 || px >= portraitData.width || py >= portraitData.height) return -1;
+    return portraitData.data[(py * portraitData.width + px) * 4] / 255;
+  };
+  const buildDots = () => {
     if (!portraitData) return;
-    const dpr = Math.min(devicePixelRatio, 2);
-    const W = dots.clientWidth, H = dots.clientHeight;
-    if (dots.width !== W * dpr) { dots.width = W * dpr; dots.height = H * dpr; }
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, W, H);
-    const step = W < 700 ? 9 : 11;
-    const { width: pw, height: ph, data } = portraitData;
-    const fit = Math.max(W * 1.04 / pw, H * 0.34 / ph);
-    const ox = (W - pw * fit) / 2, oy = Math.min(H * 0.1, 60);
-    for (let y = step / 2; y < H; y += step) {
-      for (let x = step / 2; x < W; x += step) {
-        const px = Math.floor((x - ox) / fit), py = Math.floor((y - oy) / fit);
-        if (px < 0 || py < 0 || px >= pw || py >= ph) continue;
-        const lum = data[(py * pw + px) * 4] / 255;
-        const fade = clamp((H - y) / (H * 0.3));
-        const near = clamp(1 - Math.hypot(x - pointer.x, y - pointer.y) / 170);
-        const r = lum * step * 0.46 * fade + near * 1.8;
+    dotW = dots.clientWidth; dotH = dots.clientHeight;
+    if (!dotW || !dotH) return;
+    dots.width = dotW * dotDpr; dots.height = dotH * dotDpr;
+    dotStep = dotW < 700 ? 9 : 11;
+    dotFit = Math.max(dotW * 1.04 / portraitData.width, dotH * 0.34 / portraitData.height);
+    dotX = (dotW - portraitData.width * dotFit) / 2; dotY = Math.min(dotH * 0.1, 60);
+    dotLayer = document.createElement("canvas");
+    dotLayer.width = dots.width; dotLayer.height = dots.height;
+    const g = dotLayer.getContext("2d");
+    g.setTransform(dotDpr, 0, 0, dotDpr, 0, 0);
+    for (let y = dotStep / 2; y < dotH; y += dotStep) {
+      for (let x = dotStep / 2; x < dotW; x += dotStep) {
+        const lum = lumAt(x, y);
+        if (lum < 0) continue;
+        const r = lum * dotStep * 0.46 * clamp((dotH - y) / (dotH * 0.3));
         if (r < 0.35) continue;
-        ctx.fillStyle = `rgba(233,231,225,${0.04 + lum * 0.16 + near * 0.4})`;
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, 6.283);
-        ctx.fill();
+        g.fillStyle = `rgba(233,231,225,${0.04 + lum * 0.16})`;
+        g.beginPath(); g.arc(x, y, r, 0, 6.283); g.fill();
+      }
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, dots.width, dots.height);
+    ctx.drawImage(dotLayer, 0, 0);
+  };
+  const spot = (x, y, radius) => [x - radius, y - radius, radius * 2, radius * 2];
+  const restore = (r) => {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const [a, b, c, d] = r.map((v) => v * dotDpr);
+    ctx.clearRect(a, b, c, d);
+    ctx.drawImage(dotLayer, a, b, c, d, a, b, c, d);
+  };
+  const drawDots = () => {
+    if (!dotLayer) return;
+    if (lastSpot) restore(lastSpot);
+    lastSpot = null;
+    if (pointer.x < 0) return;
+    const radius = 170;
+    lastSpot = spot(pointer.x, pointer.y, radius + 8);
+    ctx.setTransform(dotDpr, 0, 0, dotDpr, 0, 0);
+    const x0 = Math.floor((pointer.x - radius) / dotStep), y0 = Math.floor((pointer.y - radius) / dotStep);
+    for (let j = y0; j * dotStep < pointer.y + radius; j++) {
+      for (let i = x0; i * dotStep < pointer.x + radius; i++) {
+        const x = i * dotStep + dotStep / 2, y = j * dotStep + dotStep / 2;
+        const near = clamp(1 - Math.hypot(x - pointer.x, y - pointer.y) / radius);
+        if (near <= 0) continue;
+        const lum = lumAt(x, y);
+        const base = lum < 0 ? 0 : lum * dotStep * 0.46 * clamp((dotH - y) / (dotH * 0.3));
+        ctx.fillStyle = `rgba(233,231,225,${0.04 + Math.max(lum, 0) * 0.16 + near * 0.4})`;
+        ctx.beginPath(); ctx.arc(x, y, base + near * 1.8, 0, 6.283); ctx.fill();
       }
     }
   };
@@ -74,7 +109,7 @@
     const g = c.getContext("2d", { willReadFrequently: true });
     g.drawImage(portrait, 0, 0);
     portraitData = g.getImageData(0, 0, c.width, c.height);
-    drawDots();
+    buildDots();
   };
   portrait.src = "assets/dots.png";
   let dotsQueued = false;
@@ -86,7 +121,8 @@
     queueDots();
   });
   $(".id").addEventListener("pointerleave", () => { pointer.x = -999; queueDots(); });
-  addEventListener("resize", queueDots);
+  let dotsTimer = 0;
+  addEventListener("resize", () => { clearTimeout(dotsTimer); dotsTimer = setTimeout(buildDots, 200); });
 
   /* карточка: линзовая печать. Угол зрения меняет личность */
   const card = $(".card");
@@ -150,7 +186,7 @@
       <div class="tile__frame"><video muted loop playsinline preload="none" aria-label="${w.title}"></video></div>
       <footer class="tile__meta"><span class="tile__size">${w.w}×${w.h}</span><span>${w.tag}</span></footer>`;
     const video = $("video", el);
-    video.dataset.src = `assets/video/${w.id}.mp4`;
+    video.dataset.src = `assets/video/t/${w.id}.mp4`;
     video.dataset.poster = `assets/poster/${w.id}.jpg`;
     el.tabIndex = 0;
     el.setAttribute("role", "button");
@@ -158,14 +194,23 @@
     return { el, video, data: w, ratio };
   });
 
+  // одновременно играют только ролики на экране, лишние ставятся на паузу
+  const maxPlaying = fine ? 4 : 2;
+  const playing = [];
   const seen = new IntersectionObserver((entries) => {
     entries.forEach(({ target, isIntersecting }) => {
       if (isIntersecting) {
         if (!target.src && target.dataset.src) target.src = target.dataset.src;
         target.play().catch(() => {});
-      } else target.pause();
+        if (!playing.includes(target)) playing.push(target);
+        while (playing.length > maxPlaying) playing.shift().pause();
+      } else {
+        target.pause();
+        const i = playing.indexOf(target);
+        if (i >= 0) playing.splice(i, 1);
+      }
     });
-  }, { rootMargin: "12% 0px" });
+  }, { threshold: 0.35 });
   tiles.forEach((t) => seen.observe(t.video));
   // постеры подгружаем заранее, но не всей пачкой при открытии
   const near = new IntersectionObserver((entries) => {

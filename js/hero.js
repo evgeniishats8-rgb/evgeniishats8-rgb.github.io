@@ -25,12 +25,16 @@
   grid.innerHTML = "<i></i>".repeat(STEPS);
   const cells = [...grid.children];
 
+  const net = navigator.connection;
+  const light = innerWidth <= 820 || (net && (net.saveData || /(^|-)[23]g/.test(net.effectiveType || "")));
+  // качество снижается само, если устройство не успевает
+  const quality = { level: 0, slow: 0 };
   const videos = SCENES.map((s, i) => {
     const v = document.createElement("video");
     Object.assign(v, { muted: true, loop: true, playsInline: true, preload: i < 2 ? "auto" : "none" });
     v.setAttribute("muted", "");
     v.setAttribute("playsinline", "");
-    v.src = `assets/video/${s.id}.mp4`;
+    v.src = `assets/video/${light ? "m/" : ""}${s.id}.mp4`;
     srcBox.append(v);
     return v;
   });
@@ -167,6 +171,8 @@
       vec2 fc = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
       vec2 suv = vec2(fc.x / uRes.x, fc.y / uRes.y);
       float d = uD;
+      // готовый кадр: просто видео, без расчёта шума
+      if (d >= 1.) { outColor = vec4(texture(uV, suv * uCover.xy + uCover.zw).rgb, 1.); return; }
       // латент: крупные блоки растворяются в кадр
       float block = floor(mix(uRes.x / 48., 1., pow(d, .55)));
       vec2 g = floor(fc / max(block, 1.));
@@ -181,7 +187,6 @@
       float gray = dot(color, vec3(.3, .59, .11));
       color = mix(vec3(gray), color, smoothstep(.45, .95, d));
       color = mix(color, latent, amount);
-      if (d >= 1.) color = texture(uV, suv * uCover.xy + uCover.zw).rgb;
       outColor = vec4(color, 1.);
     }`;
 
@@ -264,7 +269,7 @@
   };
 
   let lost = false;
-  let uploadedTime = -1, uploadedScene = -1;
+  let uploadedTime = -1, uploadedScene = -1, texW = 0, texH = 0, lastNow = 0, shownVideo = null;
   let rerunAt = -9999;
   const state = { i: 0, d: 0, inView: true };
   const setProgress = (p) => {
@@ -291,10 +296,27 @@
     },
   });
 
+  const dropQuality = () => {
+    const dpr = quality.level ? 1 : Math.min(devicePixelRatio || 1, 2);
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.uniform2f(u.uRes, canvas.width, canvas.height);
+  };
+  addEventListener("scroll", () => hint.classList.toggle("is-off", scrollY > 40), { passive: true });
+
   const bornAt = performance.now();
   const frame = (now) => {
     requestAnimationFrame(frame);
-    if (!state.inView || lost || document.hidden) return;
+    if (!state.inView || lost || document.hidden) { lastNow = 0; return; }
+    if (lastNow) {
+      const dt = now - lastNow;
+      quality.slow = dt > 26 ? quality.slow + 1 : Math.max(0, quality.slow - 0.5);
+      if (quality.slow > 90 && quality.level < 2) {
+        quality.level += 1; quality.slow = 0; dropQuality();
+      }
+    }
+    lastNow = now;
     const time = (now - bornAt) / 1000;
     const video = videos[state.i];
     const scene = SCENES[state.i];
@@ -303,11 +325,17 @@
     d = Math.min(d, ease(clamp((now - rerunAt) / 1900)));
     if (video.readyState >= 2) {
       if (video.currentTime !== uploadedTime || state.i !== uploadedScene) {
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+        if (video.videoWidth === texW && video.videoHeight === texH) {
+          gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, video);
+        } else {
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+          texW = video.videoWidth; texH = video.videoHeight;
+        }
         uploadedTime = video.currentTime; uploadedScene = state.i;
       }
     } else if (uploadedScene !== state.i && posters[state.i].complete && posters[state.i].naturalWidth) {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, posters[state.i]);
+      texW = 0; texH = 0;
     }
     const cover = coverOf(video, scene.id);
     gl.uniform4f(u.uCover, cover.sx, cover.sy, cover.ox, cover.oy);
@@ -316,10 +344,12 @@
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
     updateNumbers(state.i, d);
-    hint.classList.toggle("is-off", scrollY > 40);
     live.video = video; live.id = scene.id; live.d = d; live.cover = cover;
-    out.latent.textContent = `[1,16,${Math.round(video.videoHeight / 8) || 103},${Math.round(video.videoWidth / 8) || 240}]`;
-    out.image.textContent = `${video.videoWidth || 1920}×${video.videoHeight || 824}`;
+    if (shownVideo !== video && video.videoWidth) {
+      shownVideo = video;
+      out.latent.textContent = `[1,16,${Math.round(video.videoHeight / 8)},${Math.round(video.videoWidth / 8)}]`;
+      out.image.textContent = `${video.videoWidth}×${video.videoHeight}`;
+    }
 
     // импульсы по проводам, пока идёт сэмплинг
     const running = d > 0.002 && d < 0.998;
@@ -423,6 +453,8 @@
     const loop = (now) => {
       requestAnimationFrame(loop);
       if (!rigs || !W2 || !stageVisible || document.hidden || !live.video) return;
+      if (now - (loop.at || 0) < (quality.level ? 66 : 33)) return;
+      loop.at = now;
       const rig = rigs[live.id];
       g.setTransform(dpr2, 0, 0, dpr2, 0, 0);
       g.clearRect(0, 0, W2, H2);
@@ -497,7 +529,7 @@
     const c = $(".holo");
     const g = !reduced && c.getContext("webgl2", { antialias: true, alpha: true, premultipliedAlpha: false });
     if (!g) return;
-    const GRID_X = 260, GRID_Y = 112;
+    const GRID_X = light ? 130 : 200, GRID_Y = light ? 56 : 86;
     const vs = `#version 300 es
       in vec2 aUv;
       uniform sampler2D uT;
@@ -551,8 +583,9 @@
     $(".v-points").textContent = (GRID_X * GRID_Y).toLocaleString("en").replace(",", " ");
     // маленькая копия кадра: и текстура для точек, и оценка фона по краям
     const small = document.createElement("canvas");
-    small.width = GRID_X; small.height = GRID_Y;
+    small.width = 130; small.height = 56;
     const sx = small.getContext("2d", { willReadFrequently: true });
+    let sampled = 0;
     const tilt = { x: 0, tx: 0 };
     stage.addEventListener("pointermove", (e) => {
       const r = stage.getBoundingClientRect();
@@ -575,19 +608,23 @@
       requestAnimationFrame(loop);
       const video = live.video;
       if (!video || !stageVisible || document.hidden || video.readyState < 2) return;
-      if (video.currentTime !== last && now - (loop.at || 0) > 50) {
+      const every = quality.level === 0 ? 66 : quality.level === 1 ? 110 : 220;
+      if (video.currentTime !== last && now - (loop.at || 0) > every) {
         last = video.currentTime; loop.at = now;
-        sx.drawImage(video, 0, 0, GRID_X, GRID_Y);
-        const data = sx.getImageData(0, 0, GRID_X, GRID_Y).data;
-        const edge = [];
-        for (let x = 0; x < GRID_X; x += 6) {
-          [0, GRID_Y - 1].forEach((y) => {
-            const i = (y * GRID_X + x) * 4;
-            edge.push((data[i] * 0.3 + data[i + 1] * 0.59 + data[i + 2] * 0.11) / 255);
-          });
+        sx.drawImage(video, 0, 0, small.width, small.height);
+        if (now - sampled > 400) {
+          sampled = now;
+          const data = sx.getImageData(0, 0, small.width, small.height).data;
+          const edge = [];
+          for (let x = 0; x < small.width; x += 4) {
+            [0, small.height - 1].forEach((y) => {
+              const i = (y * small.width + x) * 4;
+              edge.push((data[i] * 0.3 + data[i + 1] * 0.59 + data[i + 2] * 0.11) / 255);
+            });
+          }
+          edge.sort((p, q) => p - q);
+          bg += (edge[edge.length >> 1] - bg) * 0.4;
         }
-        edge.sort((p, q) => p - q);
-        bg += (edge[edge.length >> 1] - bg) * 0.3;
         g.texImage2D(g.TEXTURE_2D, 0, g.RGBA, g.RGBA, g.UNSIGNED_BYTE, small);
       }
       tilt.x += (tilt.tx - tilt.x) * 0.06;
@@ -602,7 +639,7 @@
       g.uniform1f(u2.uFocus, live.cover ? live.cover.ox + live.cover.sx / 2 : 0.5);
       g.uniform1f(u2.uRatio, (video.videoWidth || 1920) / (video.videoHeight || 824));
       g.drawArrays(g.POINTS, 0, GRID_X * GRID_Y);
-      depthEl.textContent = spin.toFixed(2);
+      if (now - (loop.text || 0) > 200) { loop.text = now; depthEl.textContent = spin.toFixed(2); }
     };
     requestAnimationFrame(loop);
   }
