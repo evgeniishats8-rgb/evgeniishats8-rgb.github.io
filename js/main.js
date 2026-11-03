@@ -193,7 +193,8 @@
       <div class="tile__frame"><video muted loop playsinline preload="none" aria-label="${w.title}"></video></div>
       <footer class="tile__meta"><span class="tile__size">${w.w}×${w.h}</span><span>${w.tag}</span></footer>`;
     const video = $("video", el);
-    video.dataset.src = `assets/video/t/${w.id}.mp4`;
+    // на телефоне лёгкая версия: первые 5 секунд, сильнее сжатая (tools/tiles_mobile.sh)
+    video.dataset.src = `assets/video/${fine ? "t" : "tm"}/${w.id}.mp4`;
     video.dataset.poster = `assets/poster/${w.id}.jpg`;
     el.tabIndex = 0;
     el.setAttribute("role", "button");
@@ -201,9 +202,10 @@
     return { el, video, data: w, ratio };
   });
 
-  // живой один ролик: под курсором или последний появившийся. Браузер снижает частоту кадров
-  // всей страницы, как только видео играет больше одного, и скролл становится рваным
-  const maxPlaying = 1;
+  // на компьютере живой один ролик: под курсором или последний появившийся. Браузер снижает частоту кадров
+  // всей страницы, как только видео играет больше одного, и плавный скролл становится рваным.
+  // На телефоне скролл нативный, ему это не мешает, поэтому там играют два
+  const maxPlaying = fine ? 1 : 2;
   const playing = [];
   const seen = new IntersectionObserver((entries) => {
     entries.forEach(({ target, isIntersecting }) => {
@@ -220,6 +222,15 @@
     });
   }, { threshold: 0.35 });
   tiles.forEach((t) => seen.observe(t.video));
+  // ролики грузятся за два с половиной экрана до появления, поэтому при скролле они уже готовы
+  const prep = new IntersectionObserver((entries) => {
+    entries.forEach(({ target, isIntersecting }) => {
+      if (!isIntersecting || target.getAttribute("src")) return;
+      target.preload = "auto";
+      target.src = target.dataset.src;
+    });
+  }, { rootMargin: "250% 0px" });
+  tiles.forEach((t) => prep.observe(t.video));
   const promote = (video) => {
     if (playing.includes(video)) return;
     playing.splice(0).forEach((v) => v.pause());
@@ -235,9 +246,9 @@
       target.poster = target.dataset.poster;
       near.unobserve(target);
     });
-  }, { rootMargin: "120% 0px" });
+  }, { rootMargin: "300% 0px" });
   tiles.forEach((t) => near.observe(t.video));
-  // на телефоне ролики далеко от экрана выгружаются из памяти
+  // на телефоне выгружаются только ролики очень далеко от экрана, чтобы при возврате не грузить заново
   if (!fine) {
     const far = new IntersectionObserver((entries) => {
       entries.forEach(({ target, isIntersecting }) => {
@@ -246,7 +257,7 @@
         target.removeAttribute("src");
         target.load();
       });
-    }, { rootMargin: "250% 0px" });
+    }, { rootMargin: "800% 0px" });
     tiles.forEach((t) => far.observe(t.video));
   }
   $$("video[data-auto]").forEach((v) => seen.observe(v));

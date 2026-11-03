@@ -1,5 +1,5 @@
-/* Главная: рабочий граф генерации. Очередь идёт сама: кадр в Preview распадается на однотонные
-   частицы, они собирают следующий шот, и он наливается цветом. Голограмма живёт в ноде LoRA. */
+/* Главная: рабочий граф генерации. Очередь идёт сама: кадр в Preview мягко перетекает в следующий шот,
+   голограмма живёт в ноде LoRA. */
 (() => {
   const $ = (s, r = document) => r.querySelector(s);
   const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
@@ -143,9 +143,8 @@
     writeLog(i, step, speed);
   };
 
-  /* кадр стоит HOLD, затем идёт переход на FLOW: кадр распадается на однотонные частицы, к CLOUD это облако,
-     к FORMED они собрали следующий шот, дальше он наливается цветом */
-  const HOLD = 4000, FLOW = 3400, CLOUD = 0.38, FORMED = 0.76, PATIENCE = 3000;
+  /* кадр стоит HOLD, затем за FLOW перетекает в следующий: старый чуть приближается, новый садится на место */
+  const HOLD = 4000, FLOW = 1800, PATIENCE = 3000;
   const state = { i: 0, restAt: 0, inView: true, held: false, active: true };
   const flow = { on: false, from: 0, to: 0, at: 0, warm: false };
   const nextOf = (i) => (i + 1) % SCENES.length;
@@ -200,9 +199,12 @@
     if (plain) showPlain(nextOf(state.i));
     else if (!flow.on) state.restAt = performance.now() - HOLD;
   });
+  // Re-run: кадр уходит в темноту и возвращается с начала ролика
+  let rerunAt = -9999;
   $(".btn--rerun").addEventListener("click", () => {
-    if (plain) videos[state.i].currentTime = 0;
-    else if (!flow.on) startFlow(state.i);
+    if (plain || flow.on) { videos[state.i].currentTime = 0; return; }
+    rerunAt = performance.now();
+    setTimeout(() => { videos[state.i].currentTime = 0; }, 350);
   });
   const openPreview = () => window.SITE.openWork(SCENES[state.i].id);
   preview.addEventListener("click", openPreview);
@@ -220,54 +222,26 @@
     return;
   }
 
-  /* Preview: готовый кадр рисуется одним слоем видео. На смене сцены он распадается на частицы, они плавно
-     текут и собираются в следующий ролик. Частицы однотонные, форму им даёт яркость двух роликов. */
+  /* Preview: кадр рисуется одним слоем. На смене сцены старый кадр чуть приближается и растворяется,
+     новый садится на место, светлые места нового проявляются немного раньше. */
   const quadVs = `#version 300 es
     in vec2 p; out vec2 vUv;
     void main() { vUv = vec2(p.x * .5 + .5, .5 - p.y * .5); gl_Position = vec4(p, 0., 1.); }`;
   const quadFs = `#version 300 es
     precision highp float;
     in vec2 vUv; out vec4 outColor;
-    uniform sampler2D uV;
-    uniform vec4 uCover;
-    uniform float uAlpha;
-    void main() { outColor = vec4(texture(uV, vUv * uCover.xy + uCover.zw).rgb, uAlpha); }`;
-  const dotVs = `#version 300 es
-    in vec2 aUv;
     uniform sampler2D uA, uB;
     uniform vec4 uCoverA, uCoverB;
-    uniform float uS, uCross, uTime, uSize, uTint;
-    out vec3 vColor;
-    out float vAlpha;
-    float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+    uniform float uMix, uFade;
+    vec3 tap(sampler2D t, vec4 c, float zoom) {
+      vec2 q = (vUv - .5) / zoom + .5;
+      return texture(t, q * c.xy + c.zw).rgb;
+    }
     void main() {
-      vec3 a = texture(uA, aUv * uCoverA.xy + uCoverA.zw).rgb;
-      vec3 b = texture(uB, aUv * uCoverB.xy + uCoverB.zw).rgb;
-      vec3 c = mix(a, b, uCross);
-      float seed = hash(aUv);
-      // частицы отрываются не разом, а волной
-      float s = smoothstep(0., 1., clamp(uS * 1.5 - seed * .5, 0., 1.));
-      float l = dot(c, vec3(.3, .59, .11));
-      vec2 p = vec2(aUv.x * 2. - 1., 1. - aUv.y * 2.);
-      vec2 flow = vec2(
-        sin(p.y * 2.7 + seed * 6.28 + uTime * .55) + .55 * sin(p.y * 6.3 - uTime * .35 + seed * 3.),
-        cos(p.x * 2.3 - seed * 6.28 + uTime * .5) + .55 * cos(p.x * 5.7 + uTime * .3 + seed * 3.)
-      );
-      vec2 q = p + flow * s * .62 + p * (l - .5) * s * .55;
-      float depth = 1. + s * (seed - .5) * .85;
-      gl_Position = vec4(q / depth, 0., 1.);
-      gl_PointSize = uSize * mix(1., .5 + seed * .75, s) / depth;
-      // цвет ролика есть только в начале распада и в конце сборки
-      vColor = mix(vec3(.56, .84, 1.) * (.14 + l * 1.15), c, clamp(uTint * 1.5 - seed * .5, 0., 1.));
-      vAlpha = 1. - s * .3;
-    }`;
-  const dotFs = `#version 300 es
-    precision mediump float;
-    in vec3 vColor; in float vAlpha; out vec4 outColor;
-    void main() {
-      float r = length(gl_PointCoord - .5);
-      if (r > .5) discard;
-      outColor = vec4(vColor, vAlpha * smoothstep(.5, .36, r));
+      vec3 a = tap(uA, uCoverA, 1. + uMix * .06);
+      vec3 b = tap(uB, uCoverB, 1.06 - uMix * .06);
+      float k = smoothstep(0., 1., clamp(uMix * 1.35 - dot(b, vec3(.3, .59, .11)) * .35, 0., 1.));
+      outColor = vec4(mix(a, b, k) * uFade, 1.);
     }`;
 
   const compile = (type, src) => {
@@ -286,8 +260,7 @@
     names.forEach((n) => { u[n] = gl.getUniformLocation(program, n); });
     return u;
   };
-  const quad = makeProgram(quadVs, quadFs, ["uV", "uCover", "uAlpha"]);
-  const dots = makeProgram(dotVs, dotFs, ["uA", "uB", "uCoverA", "uCoverB", "uS", "uCross", "uTime", "uSize", "uTint"]);
+  const quad = makeProgram(quadVs, quadFs, ["uA", "uB", "uCoverA", "uCoverB", "uMix", "uFade"]);
 
   const quadVao = gl.createVertexArray();
   gl.bindVertexArray(quadVao);
@@ -296,14 +269,6 @@
   const quadLoc = gl.getAttribLocation(quad.program, "p");
   gl.enableVertexAttribArray(quadLoc);
   gl.vertexAttribPointer(quadLoc, 2, gl.FLOAT, false, 0, 0);
-
-  const dotVao = gl.createVertexArray();
-  const dotBuffer = gl.createBuffer();
-  gl.bindVertexArray(dotVao);
-  gl.bindBuffer(gl.ARRAY_BUFFER, dotBuffer);
-  const dotLoc = gl.getAttribLocation(dots.program, "aUv");
-  gl.enableVertexAttribArray(dotLoc);
-  gl.vertexAttribPointer(dotLoc, 2, gl.FLOAT, false, 0, 0);
 
   const slots = [0, 1].map((unit) => {
     const tex = gl.createTexture();
@@ -316,25 +281,10 @@
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([9, 9, 11, 255]));
     return { unit, tex, scene: -1, time: -1, w: 0, h: 0 };
   });
-  gl.useProgram(dots.program);
-  gl.uniform1i(dots.uA, 0);
-  gl.uniform1i(dots.uB, 1);
-  gl.enable(gl.BLEND);
-  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.useProgram(quad.program);
+  gl.uniform1i(quad.uA, 0);
 
-  let W = 0, H = 0, dotCount = 0, dotSize = 4;
-  const buildGrid = (dpr) => {
-    const cell = (light ? 4.2 : 2.8) * (1 + quality.level * 0.5);
-    const gx = Math.ceil(W / cell), gy = Math.ceil(H / cell);
-    const grid = new Float32Array(gx * gy * 2);
-    for (let y = 0, i = 0; y < gy; y++) {
-      for (let x = 0; x < gx; x++) { grid[i++] = (x + 0.5) / gx; grid[i++] = (y + 0.5) / gy; }
-    }
-    gl.bindBuffer(gl.ARRAY_BUFFER, dotBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, grid, gl.STATIC_DRAW);
-    dotCount = gx * gy;
-    dotSize = cell * dpr * 1.15;
-  };
+  let W = 0, H = 0;
   const resize = () => {
     const dpr = Math.min(devicePixelRatio || 1, 2);
     const nextW = preview.clientWidth, nextH = preview.clientHeight;
@@ -343,7 +293,6 @@
     canvas.width = Math.round(W * dpr);
     canvas.height = Math.round(H * dpr);
     gl.viewport(0, 0, canvas.width, canvas.height);
-    buildGrid(dpr);
     layoutWires();
   };
   new ResizeObserver(resize).observe(preview);
@@ -381,7 +330,6 @@
     canvas.width = Math.round(W * dpr);
     canvas.height = Math.round(H * dpr);
     gl.viewport(0, 0, canvas.width, canvas.height);
-    buildGrid(dpr);
   };
 
   /* кадр ролика в текстуру: только когда он реально сменился */
@@ -403,14 +351,13 @@
       slot.w = 0; slot.h = 0; slot.scene = index; slot.time = -1;
     }
   };
-  const soft = (t) => t * t * (3 - 2 * t);
-
   const bornAt = performance.now();
+  state.restAt = bornAt;
   const tickQueue = (now) => {
     if (flow.on) return;
     const wait = now - state.restAt;
     if (wait < HOLD - 1500) return;
-    // следующий ролик запускается заранее, чтобы частицы сразу взяли форму из него
+    // следующий ролик запускается заранее, чтобы переход шёл уже по живому кадру
     if (!flow.warm) { flow.warm = true; syncVideos(); }
     if (wait < HOLD) return;
     if (videos[nextOf(state.i)].readyState < 2 && wait < HOLD + PATIENCE) return;
@@ -430,25 +377,13 @@
     tickQueue(now);
     const time = (now - bornAt) / 1000;
 
-    // сколько кадр рассыпан: 0 готовый кадр, 1 облако частиц
-    let scatter = 0, d = 1, cross = 0, tint = 1, solid = 1;
+    // mix: 0 старый кадр, 1 новый. Шаги сэмплера считаются во второй половине перехода
+    let mix = 0, d = 1, u = 0;
     if (flow.on) {
-      const u = Math.max(0, (now - flow.at) / FLOW);
-      if (u >= CLOUD) state.i = flow.to;
+      u = Math.max(0, (now - flow.at) / FLOW);
+      if (u >= 0.5) state.i = flow.to;
       if (u >= 1) { flow.on = false; state.restAt = now; syncVideos(); }
-      else {
-        cross = soft(clamp((u - 0.2) / 0.3));
-        if (u < CLOUD) {
-          scatter = ease(u / CLOUD);
-          tint = 1 - soft(clamp(u / 0.16));
-          solid = 1 - soft(clamp(u / 0.08));
-        } else {
-          d = ease(clamp((u - CLOUD) / (FORMED - CLOUD)));
-          scatter = 1 - d;
-          tint = soft(clamp((u - FORMED) / (1 - FORMED)));
-          solid = soft(clamp((u - 0.88) / 0.12));
-        }
-      }
+      else { mix = ease(u); d = u < 0.5 ? 1 : ease((u - 0.5) * 2); }
     }
     const a = flow.on ? flow.from : state.i, b = flow.on ? flow.to : state.i;
     const video = videos[state.i];
@@ -459,35 +394,20 @@
     const coverA = coverOf(videos[a], SCENES[a].id);
     const coverB = b === a ? coverA : coverOf(videos[b], SCENES[b].id);
     const cover = coverOf(video, scene.id);
+    const fade = Math.min(ease(clamp((time - 0.1) / 1.1)), 1 - 0.85 * Math.sin(Math.PI * clamp((now - rerunAt) / 700)));
 
-    gl.clearColor(0.035, 0.035, 0.043, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    if (solid > 0) {
-      const slot = flow.on && b !== a && state.i === b ? 1 : 0;
-      const c = slot ? coverB : coverA;
-      gl.useProgram(quad.program);
-      gl.bindVertexArray(quadVao);
-      gl.uniform1i(quad.uV, slot);
-      gl.uniform4f(quad.uCover, c.sx, c.sy, c.ox, c.oy);
-      gl.uniform1f(quad.uAlpha, solid);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-    }
-    if (flow.on) {
-      gl.useProgram(dots.program);
-      gl.bindVertexArray(dotVao);
-      gl.uniform1i(dots.uB, b === a ? 0 : 1);
-      gl.uniform4f(dots.uCoverA, coverA.sx, coverA.sy, coverA.ox, coverA.oy);
-      gl.uniform4f(dots.uCoverB, coverB.sx, coverB.sy, coverB.ox, coverB.oy);
-      gl.uniform1f(dots.uS, scatter);
-      gl.uniform1f(dots.uCross, cross);
-      gl.uniform1f(dots.uTime, time);
-      gl.uniform1f(dots.uSize, dotSize);
-      gl.uniform1f(dots.uTint, tint);
-      gl.drawArrays(gl.POINTS, 0, dotCount);
-    }
+    gl.useProgram(quad.program);
+    gl.bindVertexArray(quadVao);
+    gl.uniform1i(quad.uB, b === a ? 0 : 1);
+    gl.uniform4f(quad.uCoverA, coverA.sx, coverA.sy, coverA.ox, coverA.oy);
+    gl.uniform4f(quad.uCoverB, coverB.sx, coverB.sy, coverB.ox, coverB.oy);
+    gl.uniform1f(quad.uMix, mix);
+    gl.uniform1f(quad.uFade, fade);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
 
     updateNumbers(state.i, d);
-    live.video = video; live.id = scene.id; live.d = 1 - scatter; live.cover = cover;
+    live.video = video; live.id = scene.id; live.cover = cover;
+    live.d = flow.on ? 1 - 0.5 * Math.sin(Math.PI * u) : fade;
     if (shownVideo !== video && video.videoWidth) {
       shownVideo = video;
       showSize(video);
@@ -512,8 +432,8 @@
     facebox.style.height = `${h.toFixed(1)}px`;
   };
 
-  updateNumbers(0, 0);
-  startFlow(0, bornAt - FLOW * CLOUD);
+  updateNumbers(0, 1);
+  syncVideos();
   requestAnimationFrame(frame);
   startHolo();
 
@@ -743,20 +663,28 @@
   /* частицы: тот же ролик как облако точек. Глубина из яркости, объект отделён от фона */
   function startHolo() {
     const c = $(".holo");
-    const g = !reduced && c.getContext("webgl2", { antialias: true, alpha: true, premultipliedAlpha: false });
+    const g = !reduced && c.getContext("webgl2", { antialias: true, alpha: true });
     if (!g) { $(".v-points").textContent = "off"; return; }
     const GRID_X = light ? 130 : 200, GRID_Y = light ? 56 : 86;
     const vs = `#version 300 es
       in vec2 aUv;
       uniform sampler2D uT;
-      uniform float uTime, uAspect, uDpr, uSpin, uD, uRatio, uFocus, uLod;
+      uniform float uTime, uAspect, uDpr, uSpin, uD, uRatio, uFocus;
+      uniform vec2 uCell;
       out float vA;
       float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
-      float luma(vec2 uv, float lod) { return dot(textureLod(uT, uv, lod).rgb, vec3(.3, .59, .11)); }
+      float luma(vec2 uv) { return dot(texture(uT, uv).rgb, vec3(.3, .59, .11)); }
       void main() {
-        float l = luma(aUv, uLod);
-        // фон считается по краям кадра прямо в шейдере: копировать кадр в память дорого
-        float bg = (luma(vec2(.25, .03), 7.) + luma(vec2(.75, .03), 7.) + luma(vec2(.25, .97), 7.) + luma(vec2(.75, .97), 7.)) * .25;
+        // яркость точки усредняется по её клетке, фон по краям кадра. Всё в шейдере: копировать кадр
+        // в память дорого, а уменьшенные копии текстуры из видео Safari не строит
+        vec2 h = uCell * .25;
+        float l = (luma(aUv + vec2(-h.x, -h.y)) + luma(aUv + vec2(h.x, -h.y)) + luma(aUv + vec2(-h.x, h.y)) + luma(aUv + h)) * .25;
+        float bg = 0.;
+        for (int k = 0; k < 5; k++) {
+          float x = .1 + float(k) * .2;
+          bg += luma(vec2(x, .03)) + luma(vec2(x, .97));
+        }
+        bg *= .1;
         float diff = abs(l - bg);
         float seen = smoothstep(.07, .3, diff);
         float scatter = pow(1. - uD, 1.5);
@@ -773,7 +701,7 @@
     const fs = `#version 300 es
       precision mediump float;
       in float vA; out vec4 o;
-      void main() { o = vec4(.56, .84, 1., vA); }`;
+      void main() { o = vec4(vec3(.56, .84, 1.) * vA, vA); }`;
     const make = (type, src) => { const s = g.createShader(type); g.shaderSource(s, src); g.compileShader(s); return s; };
     const prog = g.createProgram();
     g.attachShader(prog, make(g.VERTEX_SHADER, vs));
@@ -781,7 +709,7 @@
     g.linkProgram(prog);
     g.useProgram(prog);
     g.enable(g.BLEND);
-    g.blendFunc(g.SRC_ALPHA, g.ONE);
+    g.blendFunc(g.ONE, g.ONE);
     const grid = new Float32Array(GRID_X * GRID_Y * 2);
     for (let y = 0, i = 0; y < GRID_Y; y++) for (let x = 0; x < GRID_X; x++) { grid[i++] = (x + 0.5) / GRID_X; grid[i++] = (y + 0.5) / GRID_Y; }
     g.bindBuffer(g.ARRAY_BUFFER, g.createBuffer());
@@ -790,14 +718,15 @@
     g.enableVertexAttribArray(aUv);
     g.vertexAttribPointer(aUv, 2, g.FLOAT, false, 0, 0);
     const u2 = {};
-    ["uT", "uTime", "uAspect", "uDpr", "uSpin", "uD", "uRatio", "uFocus", "uLod"].forEach((n) => { u2[n] = g.getUniformLocation(prog, n); });
+    ["uT", "uTime", "uAspect", "uDpr", "uSpin", "uD", "uRatio", "uFocus", "uCell"].forEach((n) => { u2[n] = g.getUniformLocation(prog, n); });
     const tex2 = g.createTexture();
     g.activeTexture(g.TEXTURE0);
     g.bindTexture(g.TEXTURE_2D, tex2);
-    g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.LINEAR_MIPMAP_LINEAR);
+    g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.LINEAR);
     g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_S, g.CLAMP_TO_EDGE);
     g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_T, g.CLAMP_TO_EDGE);
     g.uniform1i(u2.uT, 0);
+    g.uniform2f(u2.uCell, 1 / GRID_X, 1 / GRID_Y);
     $(".v-points").textContent = (GRID_X * GRID_Y).toLocaleString("en").replace(",", " ");
     const tilt = { x: 0, tx: 0 };
     stage.addEventListener("pointermove", (e) => {
@@ -829,9 +758,7 @@
         } else {
           g.texImage2D(g.TEXTURE_2D, 0, g.RGBA, g.RGBA, g.UNSIGNED_BYTE, video);
           texW = video.videoWidth; texH = video.videoHeight;
-          g.uniform1f(u2.uLod, Math.max(0, Math.log2(texW / GRID_X)));
         }
-        g.generateMipmap(g.TEXTURE_2D);
       }
       tilt.x += (tilt.tx - tilt.x) * 0.06;
       const time = (now - started) / 1000;

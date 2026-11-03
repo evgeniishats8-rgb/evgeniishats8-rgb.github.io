@@ -27,6 +27,10 @@
   let W = 0, H = 0, TW = 0, TH = 0, dpr = 1;
   let visible = false, lastPointer = -9999;
   const band = { a: 0.36, b: 0.64, ta: 0.36, tb: 0.64 };
+  // на телефоне узкие полосы читаются как сбой, поэтому слои сменяют друг друга целиком
+  const touch = !matchMedia("(hover: hover) and (pointer: fine)").matches;
+  const ORDER = ["wire", "rig", "render"];
+  let stage = -1;
 
   const size = () => {
     dpr = Math.min(devicePixelRatio || 1, 2);
@@ -86,6 +90,7 @@
     if (focus === "rig") { band.ta = 0; band.tb = 1; }
     if (focus === "render") { band.ta = 0; band.tb = 0; }
     lastPointer = focus ? performance.now() : -9999;
+    stage = -1;
   }));
 
   /* вписываем панель в окно по правилу cover */
@@ -154,7 +159,16 @@
   const loop = (now) => {
     requestAnimationFrame(loop);
     if (!visible || held || document.hidden || video.readyState < 2 || !W) return;
-    if (!focus && now - lastPointer > 2600) place(0.5 + 0.34 * Math.sin(now / 2600));
+    if (!focus && now - lastPointer > 2600) {
+      if (touch) {
+        const next = Math.floor(now / 2600) % 3;
+        if (next !== stage) {
+          stage = next;
+          band.ta = stage === 0 ? 1 : 0; band.tb = stage === 2 ? 0 : 1;
+          tabs.forEach((t) => t.classList.toggle("is-on", t.dataset.pass === ORDER[stage]));
+        }
+      } else place(0.5 + 0.34 * Math.sin(now / 2600));
+    }
     band.a += (band.ta - band.a) * 0.1;
     band.b += (band.tb - band.b) * 0.1;
     const a = band.a * W, b = band.b * W;

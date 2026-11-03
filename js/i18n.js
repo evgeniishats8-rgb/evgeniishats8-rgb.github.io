@@ -10,7 +10,7 @@
     "works.title": "Work", "works.count": "renders", "works.all": "all", "works.brand": "brands", "works.me": "with me", "works.art": "personal",
     "works.reel": "showreel with sound",
     "bull.title": "AI is a wild bull", "bull.big": "The carpet is reality. The lasso is the prompt.", "bull.small": "By attempt fifty it goes where you want.",
-    "bl.title": "Under the hood", "bl.wire": "wireframe", "bl.rig": "rig", "bl.render": "render", "bl.drag": "move the cursor",
+    "bl.title": "Under the hood", "bl.wire": "wireframe", "bl.rig": "rig", "bl.render": "render", "bl.drag": "move the cursor", "bl.tap": "tap a layer",
     "line.title": "Pipeline", "line.1": "Idea", "line.2": "Style", "line.3": "Frames", "line.4": "Video", "line.6": "Edit", "line.7": "Sound", "line.8": "QC", "line.vfx": "AI VFX",
     "svc.1": "Ads", "svc.2": "Characters", "svc.3": "Product", "svc.4": "Stage and screens", "svc.5": "Reels", "svc.6": "AI VFX",
     "svc.2d": "digital actors, mascots", "svc.5d": "series for social", "svc.6d": "effects, compositing, shot fixes",
