@@ -102,7 +102,7 @@
     const lines = [
       "got prompt",
       `seed=${s.seed} cfg=7.0 steps=${STEPS}`,
-      "lora: jdrobyshev_v7 @ 1.00",
+      `lora: ${s.lora} @ 1.00`,
       `${String(Math.round(step / STEPS * 100)).padStart(3, " ")}%|${filled}| ${step}/${STEPS} [${fmt(step / speed)}, ${speed.toFixed(2)}it/s]`,
     ];
     if (step === STEPS) lines.push(`vae ok, saved ${s.id}_00001.mp4`);
@@ -152,75 +152,120 @@
     return;
   }
 
-  const vert = `#version 300 es
-    in vec2 p; void main(){ gl_Position = vec4(p, 0., 1.); }`;
-  const frag = `#version 300 es
+  /* Preview: готовый кадр рисуется одним слоем видео. На смене сцены кадр рассыпается на частицы,
+     они плавно текут и собираются в следующий ролик. Цвет частиц берётся прямо из двух роликов. */
+  const quadVs = `#version 300 es
+    in vec2 p; out vec2 vUv;
+    void main() { vUv = vec2(p.x * .5 + .5, .5 - p.y * .5); gl_Position = vec4(p, 0., 1.); }`;
+  const quadFs = `#version 300 es
     precision highp float;
-    out vec4 outColor;
+    in vec2 vUv; out vec4 outColor;
     uniform sampler2D uV;
-    uniform vec2 uRes;
     uniform vec4 uCover;
-    uniform float uD, uTime;
-
-    float hash(vec2 p) {
-      vec3 q = fract(vec3(p.xyx) * .1031);
-      q += dot(q, q.yzx + 33.33);
-      return fract((q.x + q.y) * q.z);
-    }
+    uniform float uAlpha;
+    void main() { outColor = vec4(texture(uV, vUv * uCover.xy + uCover.zw).rgb, uAlpha); }`;
+  const dotVs = `#version 300 es
+    in vec2 aUv;
+    uniform sampler2D uA, uB;
+    uniform vec4 uCoverA, uCoverB;
+    uniform float uS, uCross, uTime, uSize;
+    out vec3 vColor;
+    out float vAlpha;
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     void main() {
-      vec2 fc = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
-      vec2 suv = vec2(fc.x / uRes.x, fc.y / uRes.y);
-      float d = uD;
-      // готовый кадр: просто видео, без расчёта шума
-      if (d >= 1.) { outColor = vec4(texture(uV, suv * uCover.xy + uCover.zw).rgb, 1.); return; }
-      // латент: крупные блоки растворяются в кадр
-      float block = floor(mix(uRes.x / 48., 1., pow(d, .55)));
-      vec2 g = floor(fc / max(block, 1.));
-      vec2 c = block <= 1. ? fc : (g + .5) * block;
-      vec2 uv = vec2(c.x / uRes.x, c.y / uRes.y) * uCover.xy + uCover.zw;
-      vec3 color = texture(uV, uv).rgb;
-      float t = floor(uTime * 16.);
-      vec3 noise = vec3(hash(g + t), hash(g + t + 11.3), hash(g + t + 27.7));
-      vec3 fine = vec3(hash(fc + t));
-      float amount = pow(1. - d, 1.6);
-      vec3 latent = mix(noise, fine, .35);
-      float gray = dot(color, vec3(.3, .59, .11));
-      color = mix(vec3(gray), color, smoothstep(.45, .95, d));
-      color = mix(color, latent, amount);
-      outColor = vec4(color, 1.);
+      vec3 a = texture(uA, aUv * uCoverA.xy + uCoverA.zw).rgb;
+      vec3 b = texture(uB, aUv * uCoverB.xy + uCoverB.zw).rgb;
+      vec3 c = mix(a, b, uCross);
+      float seed = hash(aUv);
+      // частицы отрываются не разом, а волной
+      float s = smoothstep(0., 1., clamp(uS * 1.5 - seed * .5, 0., 1.));
+      float l = dot(c, vec3(.3, .59, .11));
+      vec2 p = vec2(aUv.x * 2. - 1., 1. - aUv.y * 2.);
+      vec2 flow = vec2(
+        sin(p.y * 2.7 + seed * 6.28 + uTime * .55) + .55 * sin(p.y * 6.3 - uTime * .35 + seed * 3.),
+        cos(p.x * 2.3 - seed * 6.28 + uTime * .5) + .55 * cos(p.x * 5.7 + uTime * .3 + seed * 3.)
+      );
+      vec2 q = p + flow * s * .62 + p * (l - .5) * s * .55;
+      float depth = 1. + s * (seed - .5) * .85;
+      gl_Position = vec4(q / depth, 0., 1.);
+      gl_PointSize = uSize * mix(1., .5 + seed * .75, s) / depth;
+      vColor = c;
+      vAlpha = 1. - s * .3;
+    }`;
+  const dotFs = `#version 300 es
+    precision mediump float;
+    in vec3 vColor; in float vAlpha; out vec4 outColor;
+    void main() {
+      float r = length(gl_PointCoord - .5);
+      if (r > .5) discard;
+      outColor = vec4(vColor, vAlpha * smoothstep(.5, .36, r));
     }`;
 
   const compile = (type, src) => {
-    const s = gl.createShader(type);
-    gl.shaderSource(s, src);
-    gl.compileShader(s);
-    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s));
-    return s;
+    const sh = gl.createShader(type);
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(sh));
+    return sh;
   };
-  const program = gl.createProgram();
-  gl.attachShader(program, compile(gl.VERTEX_SHADER, vert));
-  gl.attachShader(program, compile(gl.FRAGMENT_SHADER, frag));
-  gl.linkProgram(program);
-  gl.useProgram(program);
+  const makeProgram = (vs, fs, names) => {
+    const program = gl.createProgram();
+    gl.attachShader(program, compile(gl.VERTEX_SHADER, vs));
+    gl.attachShader(program, compile(gl.FRAGMENT_SHADER, fs));
+    gl.linkProgram(program);
+    const u = { program };
+    names.forEach((n) => { u[n] = gl.getUniformLocation(program, n); });
+    return u;
+  };
+  const quad = makeProgram(quadVs, quadFs, ["uV", "uCover", "uAlpha"]);
+  const dots = makeProgram(dotVs, dotFs, ["uA", "uB", "uCoverA", "uCoverB", "uS", "uCross", "uTime", "uSize"]);
+
+  const quadVao = gl.createVertexArray();
+  gl.bindVertexArray(quadVao);
   gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-  const loc = gl.getAttribLocation(program, "p");
-  gl.enableVertexAttribArray(loc);
-  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-  const u = {};
-  ["uV", "uRes", "uCover", "uD", "uTime"].forEach((n) => { u[n] = gl.getUniformLocation(program, n); });
+  const quadLoc = gl.getAttribLocation(quad.program, "p");
+  gl.enableVertexAttribArray(quadLoc);
+  gl.vertexAttribPointer(quadLoc, 2, gl.FLOAT, false, 0, 0);
 
-  const tex = gl.createTexture();
-  gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, tex);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([9, 9, 11, 255]));
-  gl.uniform1i(u.uV, 0);
+  const dotVao = gl.createVertexArray();
+  const dotBuffer = gl.createBuffer();
+  gl.bindVertexArray(dotVao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, dotBuffer);
+  const dotLoc = gl.getAttribLocation(dots.program, "aUv");
+  gl.enableVertexAttribArray(dotLoc);
+  gl.vertexAttribPointer(dotLoc, 2, gl.FLOAT, false, 0, 0);
 
-  let W = 0, H = 0;
+  const slots = [0, 1].map((unit) => {
+    const tex = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE0 + unit);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([9, 9, 11, 255]));
+    return { unit, tex, scene: -1, time: -1, w: 0, h: 0 };
+  });
+  gl.useProgram(dots.program);
+  gl.uniform1i(dots.uA, 0);
+  gl.uniform1i(dots.uB, 1);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+  let W = 0, H = 0, dotCount = 0, dotSize = 4;
+  const buildGrid = (dpr) => {
+    const cell = (light ? 4.2 : 2.8) * (1 + quality.level * 0.5);
+    const gx = Math.ceil(W / cell), gy = Math.ceil(H / cell);
+    const grid = new Float32Array(gx * gy * 2);
+    for (let y = 0, i = 0; y < gy; y++) {
+      for (let x = 0; x < gx; x++) { grid[i++] = (x + 0.5) / gx; grid[i++] = (y + 0.5) / gy; }
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, dotBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, grid, gl.STATIC_DRAW);
+    dotCount = gx * gy;
+    dotSize = cell * dpr * 1.6;
+  };
   const resize = () => {
     const dpr = Math.min(devicePixelRatio || 1, 2);
     const nextW = preview.clientWidth, nextH = preview.clientHeight;
@@ -229,7 +274,7 @@
     canvas.width = Math.round(W * dpr);
     canvas.height = Math.round(H * dpr);
     gl.viewport(0, 0, canvas.width, canvas.height);
-    gl.uniform2f(u.uRes, canvas.width, canvas.height);
+    buildGrid(dpr);
     layoutWires();
   };
   new ResizeObserver(resize).observe(preview);
@@ -269,16 +314,18 @@
   };
 
   let lost = false;
-  let uploadedTime = -1, uploadedScene = -1, texW = 0, texH = 0, lastNow = 0, shownVideo = null;
+  let lastNow = 0, shownVideo = null;
   let rerunAt = -9999;
-  const state = { i: 0, d: 0, inView: true };
+  const IN = 0.42, OUT = 0.8;
+  const state = { i: 0, beats: 0, inView: true };
   const setProgress = (p) => {
     const beats = p * SCENES.length;
     const i = Math.min(SCENES.length - 1, Math.floor(beats));
+    const f = beats - i;
     state.i = i;
-    state.d = i === 0 ? 1 : ease(clamp((beats - i) / 0.5));
+    state.beats = beats;
     videos.forEach((v, k) => {
-      const wanted = k === i;
+      const wanted = k === i || (f > 0.74 && k === i + 1) || (f < 0.2 && k === i - 1);
       if (k === i + 1 && v.preload !== "auto") v.preload = "auto";
       if (wanted) { v.preload = "auto"; if (v.paused && state.inView) v.play().catch(() => {}); }
       else if (!v.paused) v.pause();
@@ -301,9 +348,30 @@
     canvas.width = Math.round(W * dpr);
     canvas.height = Math.round(H * dpr);
     gl.viewport(0, 0, canvas.width, canvas.height);
-    gl.uniform2f(u.uRes, canvas.width, canvas.height);
+    buildGrid(dpr);
   };
   addEventListener("scroll", () => hint.classList.toggle("is-off", scrollY > 40), { passive: true });
+
+  /* кадр ролика в текстуру: только когда он реально сменился */
+  const feed = (slot, index) => {
+    const video = videos[index];
+    gl.activeTexture(gl.TEXTURE0 + slot.unit);
+    gl.bindTexture(gl.TEXTURE_2D, slot.tex);
+    if (video.readyState >= 2) {
+      if (video.currentTime === slot.time && index === slot.scene) return;
+      if (video.videoWidth === slot.w && video.videoHeight === slot.h) {
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, video);
+      } else {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+        slot.w = video.videoWidth; slot.h = video.videoHeight;
+      }
+      slot.time = video.currentTime; slot.scene = index;
+    } else if (slot.scene !== index && posters[index].complete && posters[index].naturalWidth) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, posters[index]);
+      slot.w = 0; slot.h = 0; slot.scene = index; slot.time = -1;
+    }
+  };
+  const soft = (t) => t * t * (3 - 2 * t);
 
   const bornAt = performance.now();
   const frame = (now) => {
@@ -318,33 +386,58 @@
     }
     lastNow = now;
     const time = (now - bornAt) / 1000;
-    const video = videos[state.i];
-    const scene = SCENES[state.i];
-    // первая сцена проявляется сама при открытии
-    let d = state.i === 0 ? Math.min(state.d, ease(clamp((time - 0.2) / 2.2))) : state.d;
-    d = Math.min(d, ease(clamp((now - rerunAt) / 1900)));
-    if (video.readyState >= 2) {
-      if (video.currentTime !== uploadedTime || state.i !== uploadedScene) {
-        if (video.videoWidth === texW && video.videoHeight === texH) {
-          gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, video);
-        } else {
-          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
-          texW = video.videoWidth; texH = video.videoHeight;
-        }
-        uploadedTime = video.currentTime; uploadedScene = state.i;
-      }
-    } else if (uploadedScene !== state.i && posters[state.i].complete && posters[state.i].naturalWidth) {
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, posters[state.i]);
-      texW = 0; texH = 0;
-    }
-    const cover = coverOf(video, scene.id);
-    gl.uniform4f(u.uCover, cover.sx, cover.sy, cover.ox, cover.oy);
-    gl.uniform1f(u.uD, d);
-    gl.uniform1f(u.uTime, time);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    const i = state.i;
+    const f = state.beats - i;
+    const isLast = i === SCENES.length - 1;
+    const video = videos[i];
+    const scene = SCENES[i];
 
-    updateNumbers(state.i, d);
-    live.video = video; live.id = scene.id; live.d = d; live.cover = cover;
+    // сколько кадр рассыпан: 0 готовый кадр, 1 облако частиц
+    let scatter = 0, a = i, b = i, cross = 0;
+    if (i > 0 && f < IN) scatter = 1 - ease(f / IN);
+    if (!isLast && f > OUT) scatter = ease((f - OUT) / (1 - OUT));
+    if (!isLast && f > 0.84) { b = i + 1; cross = 0.5 * soft((f - 0.84) / 0.16); }
+    if (i > 0 && f < 0.16) { a = i - 1; cross = 0.5 + 0.5 * soft(f / 0.16); }
+    const intro = 1 - ease(clamp((time - 0.2) / 2.2));
+    const again = 1 - ease(clamp((now - rerunAt) / 1900));
+    scatter = Math.max(scatter, intro, again);
+    let d = i === 0 ? 1 - intro : ease(clamp(f / IN));
+    d = Math.min(d, 1 - again);
+
+    feed(slots[0], a);
+    if (b !== a) feed(slots[1], b);
+    const coverA = coverOf(videos[a], SCENES[a].id);
+    const coverB = b === a ? coverA : coverOf(videos[b], SCENES[b].id);
+    const cover = coverOf(video, scene.id);
+
+    gl.clearColor(0.035, 0.035, 0.043, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    const video0 = cross < 0.5 ? 0 : 1;
+    const solid = 1 - soft(clamp(scatter / 0.4));
+    if (solid > 0) {
+      gl.useProgram(quad.program);
+      gl.bindVertexArray(quadVao);
+      gl.uniform1i(quad.uV, video0);
+      const c = video0 ? coverB : coverA;
+      gl.uniform4f(quad.uCover, c.sx, c.sy, c.ox, c.oy);
+      gl.uniform1f(quad.uAlpha, solid);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+    if (scatter > 0.002) {
+      gl.useProgram(dots.program);
+      gl.bindVertexArray(dotVao);
+      gl.uniform1i(dots.uB, b === a ? 0 : 1);
+      gl.uniform4f(dots.uCoverA, coverA.sx, coverA.sy, coverA.ox, coverA.oy);
+      gl.uniform4f(dots.uCoverB, coverB.sx, coverB.sy, coverB.ox, coverB.oy);
+      gl.uniform1f(dots.uS, scatter);
+      gl.uniform1f(dots.uCross, cross);
+      gl.uniform1f(dots.uTime, time);
+      gl.uniform1f(dots.uSize, dotSize);
+      gl.drawArrays(gl.POINTS, 0, dotCount);
+    }
+
+    updateNumbers(i, d);
+    live.video = video; live.id = scene.id; live.d = 1 - scatter; live.cover = cover;
     if (shownVideo !== video && video.videoWidth) {
       shownVideo = video;
       out.latent.textContent = `[1,16,${Math.round(video.videoHeight / 8)},${Math.round(video.videoWidth / 8)}]`;
@@ -352,14 +445,14 @@
     }
 
     // импульсы по проводам, пока идёт сэмплинг
-    const running = d > 0.002 && d < 0.998;
+    const running = scatter > 0.002;
     paths.forEach((p, k) => {
       p.pulse.style.opacity = running ? 1 : 0;
       if (running) p.pulse.style.strokeDashoffset = -((time * 150 + k * 40) % 153);
     });
 
     const track = tracks[scene.id];
-    const box = track && d >= 1 ? track.box[Math.floor(video.currentTime * track.fps) % track.box.length] : null;
+    const box = track && scatter === 0 ? track.box[Math.floor(video.currentTime * track.fps) % track.box.length] : null;
     const w = box ? box[2] * W / cover.sx * 1.28 : 0, h = box ? box[3] * H / cover.sy * 1.28 : 0;
     if (!box || h > H * 0.62) { facebox.style.opacity = 0; return; }
     const x = ((box[0] + box[2] / 2 - cover.ox) / cover.sx) * W - w / 2;
