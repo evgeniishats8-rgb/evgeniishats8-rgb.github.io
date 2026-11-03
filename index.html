@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>JDROBYSHEV</title>
+<meta name="description" content="Evgenii Shats, AI creator. Films and visuals for brands: IKAR, ER-Telecom, LABA, VK, MAX.">
+<meta name="theme-color" content="#0a0a0b">
+<meta property="og:title" content="JDROBYSHEV">
+<meta property="og:description" content="No cameras were harmed">
+<meta property="og:image" content="https://evgeniishats8-rgb.github.io/assets/og.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="assets/fonts/roboto-flex-cyrillic-full-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="nav">
+  <a class="nav__logo" href="#top" aria-label="JDROBYSHEV, back to top">JDROBYSHEV<sup>®</sup></a>
+  <nav class="nav__links">
+    <a href="#works" data-i18n="nav.works">работы</a>
+    <a href="#blender" data-i18n="nav.process">процесс</a>
+    <a href="#services" data-i18n="nav.services">услуги</a>
+    <button type="button" data-reel data-i18n="nav.reel">шоурил</button>
+    <a href="#contact" data-i18n="nav.contact">написать</a>
+    <button type="button" data-lang aria-label="Language">en</button>
+  </nav>
+</header>
+
+<main id="top">
+
+  <section class="hero" aria-label="Generation pipeline">
+    <div class="hero__stage">
+      <svg class="wires" aria-hidden="true"></svg>
+      <div class="hero__src" aria-hidden="true"></div>
+
+      <article class="node node--note">
+        <header class="node__bar">Note<button type="button" class="node__reset" hidden data-i18n="hero.reset">сбросить</button></header>
+        <h1 data-i18n="hero.title">Ни одна камера не пострадала</h1>
+        <p data-i18n="hero.who">евгений шац, ии-креатор</p>
+      </article>
+
+      <article class="node node--lora">
+        <header class="node__bar">Load LoRA<i class="port port--out" data-port="lora"></i></header>
+        <canvas class="holo" aria-hidden="true"></canvas>
+        <dl class="rows">
+          <div><dt>lora_name</dt><dd class="v-lora"></dd></div>
+          <div><dt>strength</dt><dd>1.00</dd></div>
+          <div><dt>points</dt><dd class="v-points"></dd></div>
+          <div><dt>depth</dt><dd class="v-az">0.00</dd></div>
+        </dl>
+      </article>
+
+      <article class="node node--prompt">
+        <header class="node__bar">CLIP Text Encode<i class="port port--out" data-port="prompt"></i></header>
+        <pre class="prompt"><code class="prompt__text"></code><b></b></pre>
+      </article>
+
+      <article class="node node--preview">
+        <header class="node__bar"><i class="port port--in port--bottom" data-port="preview"></i>Preview<span class="preview__hint" data-i18n="hero.hint">листай, чтобы запустить следующую генерацию</span><span class="preview__file"></span></header>
+        <div class="preview" role="button" tabindex="0" aria-label="Play this work with sound">
+          <canvas class="preview__canvas" aria-hidden="true"></canvas>
+          <span class="preview__play" data-i18n="hero.sound">со звуком</span>
+          <div class="facebox" aria-hidden="true"><span class="facebox__tag"></span></div>
+        </div>
+      </article>
+
+      <article class="node node--sampler">
+        <header class="node__bar"><i class="port port--in" data-port="sampler"></i>KSampler<i class="port port--out" data-port="sampler-out"></i></header>
+        <dl class="rows rows--num">
+          <div><dt>seed</dt><dd class="v-seed"></dd></div>
+          <div><dt>steps</dt><dd class="v-steps"></dd></div>
+          <div><dt>cfg</dt><dd>7.0</dd></div>
+          <div><dt>sampler</dt><dd>euler</dd></div>
+          <div><dt>denoise</dt><dd class="v-denoise"></dd></div>
+          <div><dt>speed</dt><dd class="v-speed"></dd></div>
+          <div><dt>latent</dt><dd class="v-latent"></dd></div>
+          <div><dt>image</dt><dd class="v-image"></dd></div>
+        </dl>
+        <div class="grid50" aria-hidden="true"></div>
+        <div class="node__btns">
+          <button type="button" class="btn btn--queue" data-i18n="hero.queue">Следующая генерация</button>
+          <button type="button" class="btn btn--rerun" data-i18n="hero.rerun">Заново</button>
+        </div>
+      </article>
+
+      <article class="node node--vae">
+        <header class="node__bar"><i class="port port--in" data-port="vae"></i>Blockout<span class="rig__name"></span><i class="port port--out" data-port="vae-out"></i></header>
+        <div class="rig"><canvas class="rig__canvas" aria-hidden="true"></canvas><span class="rig__note"></span></div>
+      </article>
+
+      <article class="node node--log">
+        <header class="node__bar"><i class="port port--in" data-port="log"></i>Console<span class="log__count"></span></header>
+        <pre class="log" aria-hidden="true"></pre>
+      </article>
+    </div>
+  </section>
+
+  <section class="id" id="about">
+    <canvas class="id__dots" aria-hidden="true"></canvas>
+    <div class="id__inner">
+      <h2 class="id__title" data-i18n="id.title">Восемь лет снимал.<br>Теперь не снимаю.</h2>
+      <p class="eyebrow" data-i18n="id.sub">ролики и визуал для брендов</p>
+
+      <div class="card" tabindex="0" role="button" aria-label="Creator ID card. Press to flip">
+        <div class="card__body">
+          <div class="card__face card__front">
+            <div class="card__head"><b data-i18n="card.head">УДОСТОВЕРЕНИЕ ИИ-КРЕАТОРА</b><span>AI CREATOR ID · № 0000007</span></div>
+            <div class="card__photo"><span class="card__role"></span></div>
+            <dl class="card__data">
+              <div><dt>фамилия / surname</dt><dd data-i18n="card.surname">ШАЦ</dd></div>
+              <div><dt>имя / name</dt><dd data-i18n="card.name">ЕВГЕНИЙ</dd></div>
+              <div><dt data-i18n="card.call">позывной</dt><dd>JDROBYSHEV</dd></div>
+              <div><dt data-i18n="card.base">база</dt><dd data-i18n="card.city">ХАЙФА · ТЕЛЬ-АВИВ</dd></div>
+              <div><dt data-i18n="card.ids">личностей</dt><dd class="card__n">1 из 7</dd></div>
+              <div><dt data-i18n="card.cams">камер</dt><dd>0</dd></div>
+            </dl>
+            <div class="card__sign" data-i18n="card.sign">Шац</div>
+            <div class="card__chip"></div>
+            <p class="card__mrz">P&lt;AI&lt;SHATS&lt;&lt;EVGENII&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;<br>JD0000007&lt;NO&lt;CAMERAS&lt;&lt;ONE&lt;PERSON&lt;&lt;&lt;&lt;&lt;&lt;07</p>
+            <div class="card__holo"></div>
+          </div>
+          <div class="card__face card__back">
+            <p class="card__found" data-i18n="card.found">Нашёл? Напиши.</p>
+            <ul class="card__links">
+              <li><a href="mailto:evgeniishats8@gmail.com">evgeniishats8@gmail.com</a></li>
+              <li><a href="https://www.instagram.com/jdrobyshev/" target="_blank" rel="noopener">instagram @jdrobyshev</a></li>
+            </ul>
+            <p class="card__tools">KLING · SEEDANCE · WAN · HIGGSFIELD · MIDJOURNEY · BLENDER</p>
+            <div class="card__holo"></div>
+          </div>
+        </div>
+      </div>
+      <p class="card__hint"><span class="hint-fine" data-i18n="card.hint.fine">веди курсором, нажми</span><span class="hint-touch" data-i18n="card.hint.touch">веди пальцем, нажми</span></p>
+    </div>
+  </section>
+
+  <section class="works" id="works">
+    <div class="works__head">
+      <h2 data-i18n="works.title">Работы</h2>
+      <p class="works__count"></p>
+      <button type="button" class="works__arrange" data-i18n="works.arrange">разложить</button>
+      <div class="works__filter" role="group" aria-label="Filter work">
+        <button type="button" class="is-on" data-filter="all" data-i18n="works.all">всё</button>
+        <button type="button" data-filter="brand" data-i18n="works.brand">бренды</button>
+        <button type="button" data-filter="me" data-i18n="works.me">со мной</button>
+        <button type="button" data-filter="art" data-i18n="works.art">личное</button>
+      </div>
+    </div>
+    <div class="board"></div>
+    <button type="button" class="reel-cta" data-reel><span data-i18n="works.reel">шоурил со звуком</span> <span>→</span></button>
+  </section>
+
+  <section class="bull">
+    <div class="bull__video"><video src="assets/video/w_bull.mp4" poster="assets/poster/w_bull.jpg" muted loop playsinline preload="none" data-auto></video></div>
+    <div class="bull__text">
+      <h2 data-i18n="bull.title">ИИ это дикий бык</h2>
+      <p class="bull__big" data-i18n="bull.big">Ковёр, это реальность. Лассо, это промт.</p>
+      <p data-i18n="bull.small">С пятидесятой попытки идёт куда надо.</p>
+    </div>
+  </section>
+
+  <section class="clients" aria-label="Clients">
+    <div class="ticker"><div class="ticker__row"></div></div>
+  </section>
+
+  <section class="bl" id="blender">
+    <div class="bl__head">
+      <h2 data-i18n="bl.title">Под капотом</h2>
+      <p class="eyebrow">blender 5.2 · mule-4</p>
+    </div>
+    <div class="bl__app">
+      <aside class="bl__side" aria-hidden="true">
+        <header class="node__bar">Outliner</header>
+        <ul class="bl__tree"></ul>
+        <dl class="rows bl__stats"></dl>
+      </aside>
+      <div class="bl__main">
+        <header class="node__bar bl__bar">
+          <button type="button" class="is-on" data-pass="wire" data-i18n="bl.wire">сетка</button>
+          <button type="button" data-pass="rig" data-i18n="bl.rig">риг</button>
+          <button type="button" data-pass="render" data-i18n="bl.render">рендер</button>
+          <span class="bl__frame"></span>
+        </header>
+        <div class="bl__view">
+          <video src="" muted loop playsinline preload="none" aria-hidden="true"></video>
+          <canvas aria-label="MULE-4 walker: wireframe, rig and final render of one shot"></canvas>
+          <div class="bl__split"><span data-i18n="bl.drag">веди курсором</span></div>
+        </div>
+        <div class="bl__time" aria-hidden="true"><canvas></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="line" id="pipeline">
+    <div class="line__head">
+      <h2 data-i18n="line.title">Конвейер</h2>
+    </div>
+    <pre class="code" aria-label="Pipeline code sample"><code><i># workflow.py</i>
+<b>for</b> shot <b>in</b> storyboard:
+    frame = keyframe(shot.prompt, hero=<u>"jdrobyshev_v7"</u>, seed=shot.seed)
+    clip  = generate(frame, model=<u>"seedance"</u>, steps=<em>50</em>, cfg=<em>7.0</em>)
+    <b>while not</b> qc.passed(clip):              <i># frames, cuts, faces</i>
+        clip = generate(frame, seed=shot.seed + <em>1</em>)
+    timeline.add(clip, on_beat=<b>True</b>)
+
+master = timeline.render(fps=<em>24</em>, lufs=<em>-14</em>, cameras=<em>0</em>)</code></pre>
+    <ol class="line__nodes">
+      <li><span>01</span><h3 data-i18n="line.1">Идея</h3><small>claude</small></li>
+      <li><span>02</span><h3 data-i18n="line.2">Стиль</h3><small>midjourney</small></li>
+      <li><span>03</span><h3 data-i18n="line.3">Кадры</h3><small>nano banana</small></li>
+      <li><span>04</span><h3 data-i18n="line.4">Видео</h3><small>kling, seedance, wan, higgsfield</small></li>
+      <li><span>05</span><h3>3D</h3><small>blender</small></li>
+      <li><span>06</span><h3 data-i18n="line.6">Монтаж</h3><small>davinci resolve, hyperframes</small></li>
+      <li><span>07</span><h3 data-i18n="line.7">Звук</h3><small>elevenlabs</small></li>
+      <li><span>08</span><h3 data-i18n="line.8">Контроль</h3><small>ffmpeg, qc</small></li>
+    </ol>
+  </section>
+
+  <section class="services" id="services">
+    <ol class="services__list">
+      <li data-preview="w_laba" tabindex="0" role="button"><span>1/</span><h3 data-i18n="svc.1">Реклама</h3><p data-i18n="svc.1d">ЛАБА, ИКАР, Эр-Телеком</p></li>
+      <li data-preview="w_jam" tabindex="0" role="button"><span>2/</span><h3 data-i18n="svc.2">Персонажи</h3><p data-i18n="svc.2d">цифровые актёры, маскоты</p></li>
+      <li data-preview="w_zepro" tabindex="0" role="button"><span>3/</span><h3 data-i18n="svc.3">Продукт</h3><p data-i18n="svc.3d">Zepro, Детский мир</p></li>
+      <li data-preview="w_polar" tabindex="0" role="button"><span>4/</span><h3 data-i18n="svc.4">Сцена и экраны</h3><p>Legal Unity, Polar Night</p></li>
+      <li data-preview="w_car" tabindex="0" role="button"><span>5/</span><h3 data-i18n="svc.5">Рилсы</h3><p data-i18n="svc.5d">серии для соцсетей</p></li>
+    </ol>
+    <div class="services__float" aria-hidden="true"><video muted loop playsinline preload="none"></video></div>
+  </section>
+
+  <footer class="end" id="contact">
+    <p class="end__big" data-i18n="end.title">Следующий seed твой</p>
+    <div class="end__row">
+      <div class="end__contact">
+        <a class="end__mail" href="mailto:evgeniishats8@gmail.com">evgeniishats8@gmail.com</a>
+        <button type="button" class="end__copy" data-i18n="end.copy">скопировать</button>
+      </div>
+      <ul>
+        <li><a href="https://www.instagram.com/jdrobyshev/" target="_blank" rel="noopener">instagram</a></li>
+        <li><a href="https://www.tiktok.com/@jdrobysh" target="_blank" rel="noopener">tiktok</a></li>
+        <li><a href="#top" data-i18n="end.top">наверх</a></li>
+      </ul>
+      <p data-i18n="end.place">хайфа, тель-авив<br>работаю со всем миром</p>
+    </div>
+    <div class="end__word" aria-hidden="true">JDROBYSHEV<sup>®</sup></div>
+  </footer>
+</main>
+
+<noscript><p style="padding:24px;color:#e9e7e1;font-family:sans-serif">Evgenii Shats, JDROBYSHEV. <a style="color:#8fd6ff" href="mailto:evgeniishats8@gmail.com">evgeniishats8@gmail.com</a></p></noscript>
+
+<dialog class="lightbox" aria-label="Work viewer">
+  <button type="button" class="lightbox__nav lightbox__nav--prev" aria-label="Previous">←</button>
+  <button type="button" class="lightbox__nav lightbox__nav--next" aria-label="Next">→</button>
+  <button type="button" class="lightbox__close" aria-label="Close" data-i18n="close">закрыть</button>
+  <video playsinline controls></video>
+  <p class="lightbox__cap"></p>
+</dialog>
+
+<script src="js/i18n.js"></script>
+<script src="assets/vendor/gsap.min.js"></script>
+<script src="assets/vendor/ScrollTrigger.min.js"></script>
+<script src="assets/vendor/Draggable.min.js"></script>
+<script src="assets/vendor/lenis.min.js"></script>
+<script src="js/data.js"></script>
+<script src="js/main.js"></script>
+<script src="js/hero.js"></script>
+<script src="js/blender.js"></script>
+<script>I18N.apply()</script>
+</body>
+</html>
