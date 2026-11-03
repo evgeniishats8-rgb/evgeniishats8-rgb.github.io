@@ -8,6 +8,16 @@
   const PANEL_W = 1280, PANEL_H = 536;
   const PASS = { wire: 0, rig: 1, render: 2 };
   const HOLO = "#8fd6ff";
+  // таймлайн лежит на панели сайта, поэтому его цвета зависят от темы. Кости рисуются поверх видео и не меняются
+  const tone = {};
+  const readTone = () => {
+    const bright = THEME.get() === "light";
+    Object.assign(tone, bright
+      ? { text: "#8d8c87", grid: "rgba(20,20,22,.1)", a: "rgba(20,20,22,.5)", b: "rgba(29,111,165,.65)", head: "#1d6fa5" }
+      : { text: "#5b5b59", grid: "rgba(233,231,225,.1)", a: "rgba(233,231,225,.55)", b: "rgba(143,214,255,.6)", head: HOLO });
+  };
+  readTone();
+  THEME.on(readTone);
   const LABELS = ["hip_FL", "knee_FR", "ankle_RL", "crane_arm", "head_yaw"];
 
   const section = $(".bl");
@@ -136,7 +146,7 @@
     const total = data.frames.length;
     const xOf = (n) => (n / (total - 1)) * (TW - 20) + 10;
     tx.font = "9px Mono, monospace";
-    tx.fillStyle = "#5b5b59"; tx.strokeStyle = "rgba(233,231,225,.1)"; tx.lineWidth = 1;
+    tx.fillStyle = tone.text; tx.strokeStyle = tone.grid; tx.lineWidth = 1;
     for (let n = 0; n < total; n += 10) {
       tx.beginPath(); tx.moveTo(xOf(n) + 0.5, 0); tx.lineTo(xOf(n) + 0.5, TH); tx.stroke();
       if (TW > 500) tx.fillText(n + 1, xOf(n) + 3, 9);
@@ -149,10 +159,10 @@
         const y = TH - 5 - ((v - lo) / (hi - lo || 1)) * (TH - 16);
         if (n) tx.lineTo(xOf(n), y); else tx.moveTo(xOf(n), y);
       });
-      tx.strokeStyle = k < 2 ? "rgba(233,231,225,.55)" : "rgba(143,214,255,.6)";
+      tx.strokeStyle = k < 2 ? tone.a : tone.b;
       tx.stroke();
     });
-    tx.fillStyle = HOLO;
+    tx.fillStyle = tone.head;
     tx.fillRect(Math.round(xOf(frame)), 0, 1, TH);
   };
 

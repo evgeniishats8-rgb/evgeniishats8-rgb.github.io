@@ -37,5 +37,20 @@
   }, true);
 
   I18N.apply();
+
+  // переключатель темы показывает ту тему, в которую переведёт
+  const themeBtn = document.querySelector("[data-theme-toggle]");
+  const paintTheme = () => {
+    themeBtn.textContent = THEME.get() === "light" ? I18N.t("theme.dark", "тёмная") : I18N.t("theme.light", "светлая");
+  };
+  themeBtn.addEventListener("click", () => {
+    const root = document.documentElement;
+    root.classList.add("theme-fade");
+    THEME.set(THEME.get() === "light" ? "dark" : "light");
+    setTimeout(() => root.classList.remove("theme-fade"), 600);
+  });
+  THEME.on(paintTheme);
+  I18N.onChange(paintTheme);
+  paintTheme();
   document.documentElement.classList.add("ready");
 })();

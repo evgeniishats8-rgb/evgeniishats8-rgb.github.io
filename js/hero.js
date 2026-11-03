@@ -492,6 +492,17 @@
     const balls = Array.from({ length: COUNT }, () => [0, 0, 0, 0, 0, 0]);
     const shown = new Float32Array(COUNT * 3);
     const u = {};
+    // цвета массы под тему: тёмная нода и голубое свечение или светлая нода и синий контур
+    const tone = {};
+    const readTone = () => {
+      const bright = THEME.get() === "light";
+      tone.base = bright ? [0.984, 0.98, 0.969] : [0.059, 0.063, 0.075];
+      tone.glow = bright ? [0.11, 0.42, 0.65] : [0.56, 0.84, 1];
+      tone.shine = bright ? 0.5 : 1;
+      tone.flat = bright ? "rgba(29,111,165,.18)" : "rgba(143,214,255,.16)";
+    };
+    readTone();
+    THEME.on(readTone);
     if (g) {
       const vs = `#version 300 es
         in vec2 p;
@@ -499,7 +510,8 @@
       const fs = `#version 300 es
         precision highp float;
         uniform vec3 uB[${COUNT}];
-        uniform float uK, uT, uRing, uTime, uH;
+        uniform float uK, uT, uRing, uTime, uH, uShine;
+        uniform vec3 uBase, uGlow;
         out vec4 o;
         void main() {
           vec2 q = vec2(gl_FragCoord.x, uH - gl_FragCoord.y);
@@ -521,8 +533,8 @@
           float rim = pow(1. - n.z, 1.7);
           float lit = max(dot(n, normalize(vec3(-.45, -.55, .7))), 0.);
           float rings = smoothstep(.1, 0., abs(fract(d / uRing + uTime * .07) - .5));
-          vec3 holo = vec3(.56, .84, 1.);
-          vec3 col = vec3(.059, .063, .075) + holo * (.04 + lit * .15 + rim * .62 + rings * .13) + vec3(.8) * pow(lit, 26.) * .45;
+          float amt = clamp(.04 + lit * .15 + rim * .62 + rings * .13, 0., 1.);
+          vec3 col = mix(uBase, uGlow, amt) + vec3(.8) * pow(lit, 26.) * .45 * uShine;
           o = vec4(col * body, body);
         }`;
       const make = (type, src) => { const s = g.createShader(type); g.shaderSource(s, src); g.compileShader(s); return s; };
@@ -536,7 +548,7 @@
       const at = g.getAttribLocation(prog, "p");
       g.enableVertexAttribArray(at);
       g.vertexAttribPointer(at, 2, g.FLOAT, false, 0, 0);
-      ["uB", "uK", "uT", "uRing", "uTime", "uH"].forEach((n) => { u[n] = g.getUniformLocation(prog, n); });
+      ["uB", "uK", "uT", "uRing", "uTime", "uH", "uShine", "uBase", "uGlow"].forEach((n) => { u[n] = g.getUniformLocation(prog, n); });
     }
     const size = () => {
       dpr2 = Math.min(devicePixelRatio || 1, 1.5);
@@ -634,7 +646,7 @@
       if (!g) {
         flat.setTransform(dpr2, 0, 0, dpr2, 0, 0);
         flat.clearRect(0, 0, W2, H2);
-        flat.fillStyle = "rgba(143,214,255,.16)";
+        flat.fillStyle = tone.flat;
         for (let i = 0; i < COUNT; i++) {
           flat.beginPath();
           flat.arc(ox + shown[i * 3] * view, oy + shown[i * 3 + 1] * view, shown[i * 3 + 2] * view, 0, 6.283);
@@ -655,6 +667,9 @@
       g.uniform1f(u.uRing, 7 * dpr2);
       g.uniform1f(u.uTime, sway * time);
       g.uniform1f(u.uH, c.height);
+      g.uniform1f(u.uShine, tone.shine);
+      g.uniform3fv(u.uBase, tone.base);
+      g.uniform3fv(u.uGlow, tone.glow);
       g.drawArrays(g.TRIANGLES, 0, 3);
     };
     requestAnimationFrame(loop);
@@ -701,7 +716,8 @@
     const fs = `#version 300 es
       precision mediump float;
       in float vA; out vec4 o;
-      void main() { o = vec4(vec3(.56, .84, 1.) * vA, vA); }`;
+      uniform vec3 uInk;
+      void main() { o = vec4(uInk * vA, vA); }`;
     const make = (type, src) => { const s = g.createShader(type); g.shaderSource(s, src); g.compileShader(s); return s; };
     const prog = g.createProgram();
     g.attachShader(prog, make(g.VERTEX_SHADER, vs));
@@ -709,7 +725,12 @@
     g.linkProgram(prog);
     g.useProgram(prog);
     g.enable(g.BLEND);
-    g.blendFunc(g.ONE, g.ONE);
+    // в тёмной теме точки складываются в свечение, в светлой ложатся синей краской поверх
+    const paintInk = () => {
+      const bright = THEME.get() === "light";
+      g.uniform3f(u2.uInk, ...(bright ? [0.11, 0.42, 0.65] : [0.56, 0.84, 1]));
+      g.blendFunc(g.ONE, bright ? g.ONE_MINUS_SRC_ALPHA : g.ONE);
+    };
     const grid = new Float32Array(GRID_X * GRID_Y * 2);
     for (let y = 0, i = 0; y < GRID_Y; y++) for (let x = 0; x < GRID_X; x++) { grid[i++] = (x + 0.5) / GRID_X; grid[i++] = (y + 0.5) / GRID_Y; }
     g.bindBuffer(g.ARRAY_BUFFER, g.createBuffer());
@@ -718,7 +739,9 @@
     g.enableVertexAttribArray(aUv);
     g.vertexAttribPointer(aUv, 2, g.FLOAT, false, 0, 0);
     const u2 = {};
-    ["uT", "uTime", "uAspect", "uDpr", "uSpin", "uD", "uRatio", "uFocus", "uCell"].forEach((n) => { u2[n] = g.getUniformLocation(prog, n); });
+    ["uT", "uTime", "uAspect", "uDpr", "uSpin", "uD", "uRatio", "uFocus", "uCell", "uInk"].forEach((n) => { u2[n] = g.getUniformLocation(prog, n); });
+    paintInk();
+    THEME.on(paintInk);
     const tex2 = g.createTexture();
     g.activeTexture(g.TEXTURE0);
     g.bindTexture(g.TEXTURE_2D, tex2);

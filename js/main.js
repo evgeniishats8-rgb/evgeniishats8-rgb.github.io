@@ -45,6 +45,10 @@
   // статичный слой рисуется один раз, от курсора обновляется только маленький участок
   let dotLayer = null, dotStep = 11, dotFit = 1, dotX = 0, dotY = 0, dotW = 0, dotH = 0, lastSpot = null;
   const dotDpr = Math.min(devicePixelRatio, 1.5);
+  // точки светлые на тёмной теме и тёмные на светлой
+  let dotRgb = "233,231,225";
+  const readDots = () => { dotRgb = THEME.get() === "light" ? "20,20,22" : "233,231,225"; };
+  readDots();
   const lumAt = (x, y) => {
     const px = Math.floor((x - dotX) / dotFit), py = Math.floor((y - dotY) / dotFit);
     if (px < 0 || py < 0 || px >= portraitData.width || py >= portraitData.height) return -1;
@@ -68,7 +72,7 @@
         if (lum < 0) continue;
         const r = lum * dotStep * 0.46 * clamp((dotH - y) / (dotH * 0.3));
         if (r < 0.35) continue;
-        g.fillStyle = `rgba(233,231,225,${0.04 + lum * 0.16})`;
+        g.fillStyle = `rgba(${dotRgb},${0.04 + lum * 0.16})`;
         g.beginPath(); g.arc(x, y, r, 0, 6.283); g.fill();
       }
     }
@@ -99,7 +103,7 @@
         if (near <= 0) continue;
         const lum = lumAt(x, y);
         const base = lum < 0 ? 0 : lum * dotStep * 0.46 * clamp((dotH - y) / (dotH * 0.3));
-        ctx.fillStyle = `rgba(233,231,225,${0.04 + Math.max(lum, 0) * 0.16 + near * 0.4})`;
+        ctx.fillStyle = `rgba(${dotRgb},${0.04 + Math.max(lum, 0) * 0.16 + near * 0.4})`;
         ctx.beginPath(); ctx.arc(x, y, base + near * 1.8, 0, 6.283); ctx.fill();
       }
     }
@@ -122,6 +126,7 @@
     queueDots();
   });
   $(".id").addEventListener("pointerleave", () => { pointer.x = -999; queueDots(); });
+  THEME.on(() => { readDots(); lastSpot = null; buildDots(); });
   let dotsTimer = 0;
   addEventListener("resize", () => { clearTimeout(dotsTimer); dotsTimer = setTimeout(buildDots, 200); });
 
