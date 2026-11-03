@@ -74,6 +74,14 @@ video,img{display:block;max-width:100%}
 .preview{cursor:pointer}
 .preview__play{position:absolute;z-index:2;right:10px;bottom:8px;padding:2px 7px;background:rgba(9,9,11,.72);font:400 11px/1.5 Mono,monospace;color:var(--paper);opacity:0;transition:opacity .2s;pointer-events:none}
 .preview:hover .preview__play,.preview:focus-visible .preview__play{opacity:1}
+/* призыв прямо на работе: по нему открывается бриф с этой работой как референсом */
+.preview__want{position:absolute;z-index:3;left:12px;bottom:12px;display:inline-flex;gap:8px;align-items:center;padding:11px 16px;overflow:hidden;border-radius:3px;background:var(--holo);color:#06121a;font:400 13px/1.2 Mono,monospace;box-shadow:0 6px 24px rgba(0,0,0,.35);transition:filter .2s}
+html[data-theme="light"] .preview__want{color:#fff}
+.preview__want::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.55) 50%,transparent 65%);transform:translateX(-120%);animation:want-shine 4.5s 2s infinite}
+@keyframes want-shine{0%{transform:translateX(-120%)}22%,100%{transform:translateX(120%)}}
+.preview__want span:last-child{transition:transform .4s var(--ease)}
+.preview__want:hover{filter:brightness(1.1)}
+.preview__want:hover span:last-child{transform:translateX(4px)}
 .port{position:absolute;top:50%;width:7px;height:7px;margin-top:-3.5px;border-radius:50%;background:var(--ink);border:1px solid var(--mute)}
 .port--out{right:-4px}.port--in{left:-4px}
 .port--bottom{left:50%;top:auto;margin:0}
@@ -306,6 +314,10 @@ html[data-theme="light"] .brief::backdrop{background:rgba(242,241,236,.88)}
 .brief__body.is-in{animation:brief-in .45s var(--ease)}
 @keyframes brief-in{from{opacity:0;transform:translateY(8px)}}
 .brief__title{margin-bottom:clamp(16px,2.4vw,26px);font-family:Flex,system-ui,sans-serif;font-stretch:118%;font-variation-settings:"opsz" 96;letter-spacing:-.02em;line-height:1.06;font-size:clamp(24px,3vw,38px)}
+.brief__ref{margin:-8px 0 18px;font:400 12px/1.5 Mono,monospace;color:var(--mute)}
+.brief__ref b{font-weight:400;color:var(--holo)}
+.brief__ref button{margin-left:8px;color:var(--dim);border-bottom:1px solid var(--line2)}
+.brief__ref button:hover{color:var(--paper)}
 .brief__chips{display:flex;flex-wrap:wrap;gap:8px}
 .brief__chip{padding:9px 13px;border:1px solid var(--line2);border-radius:3px;background:var(--bar);font:400 13px/1.2 Mono,monospace;color:var(--text2);transition:border-color .2s,color .2s,background-color .2s}
 .brief__chips--tasks .brief__chip{padding:12px 16px;font-size:14px}
@@ -341,9 +353,10 @@ html[data-theme="light"] .brief__go{color:#fff}
   .brief{width:calc(100vw - 16px);max-height:calc(100svh - 16px);margin-top:8px}
   .brief__steps span:not(.is-now),.brief__steps i{display:none}
   .brief__go{flex:1 0 100%;text-align:center}
+  .preview__want{left:8px;bottom:8px;padding:9px 13px;font-size:12px}
 }
 @media (pointer:coarse){.brief__chip{min-height:44px}}
-@media (prefers-reduced-motion:reduce){.brief[open] .brief__box,.brief[open] .brief__box::after,.brief__body.is-in{animation:none}}
+@media (prefers-reduced-motion:reduce){.brief[open] .brief__box,.brief[open] .brief__box::after,.brief__body.is-in,.preview__want::after{animation:none}}
 
 @media (max-width:1240px){
   .node--log{display:none}

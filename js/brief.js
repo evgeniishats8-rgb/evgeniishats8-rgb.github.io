@@ -71,15 +71,22 @@
     how: L("Откроется чат со мной, бриф уже вписан. Останется нажать «отправить».", "A chat with me opens with the brief already typed in. Just hit send."),
     head: L("Бриф с сайта JDROBYSHEV", "Brief from the JDROBYSHEV site"),
     task: L("Задача", "Task"),
+    like: L("Как в работе", "Like"),
+    unref: L("убрать", "remove"),
     subject: L("Бриф", "Brief"),
   };
 
   const box = document.querySelector(".brief");
   if (!box) return;
   const body = box.querySelector(".brief__body");
-  const st = { step: 0, task: null, ans: {}, name: "", note: "" };
+  const st = { step: 0, task: null, ans: {}, name: "", note: "", ref: "" };
   const task = () => TASKS.find((x) => x.id === st.task);
   const questions = () => (task() ? task().qs : []);
+  // работа, на которой нажали «хочу такой ролик»
+  const refName = () => {
+    const w = window.SITE.WORKS.find((x) => x.id === st.ref);
+    return w ? (I18N.lang === "en" && w.title_en ? w.title_en : w.title) : "";
+  };
 
   // ответ как текст на текущем языке
   const answer = (q) => {
@@ -91,6 +98,7 @@
 
   const message = () => {
     const rows = [t(TEXT.head), "", `${t(TEXT.task)}: ${t(task().name)}`];
+    if (refName()) rows.push(`${t(TEXT.like)}: ${refName()}`);
     [...questions(), ...COMMON].forEach((q) => { const a = answer(q); if (a) rows.push(`${t(q.q)}: ${a}`); });
     if (st.name.trim()) rows.push(`${t(TEXT.name)}: ${st.name.trim()}`);
     if (st.note.trim()) rows.push("", st.note.trim());
@@ -100,6 +108,7 @@
   // тот же бриф как промт в ноде: ключи по-английски, как в JSON на главной
   const json = () => {
     const pairs = [["task", task().id]];
+    if (refName()) pairs.push(["like", refName()]);
     [...questions(), ...COMMON].forEach((q) => { const a = answer(q); if (a) pairs.push([q.id, a]); });
     if (st.name.trim()) pairs.push(["from", st.name.trim()]);
     if (st.note.trim()) pairs.push(["details", st.note.trim().replace(/\s+/g, " ")]);
@@ -118,6 +127,7 @@
 
   const views = [
     () => `<h2 class="brief__title" id="brief-title">${esc(t(TEXT.t0))}</h2>
+      ${refName() ? `<p class="brief__ref">${esc(t(TEXT.like))}: <b>${esc(refName())}</b> <button type="button" data-unref>${esc(t(TEXT.unref))}</button></p>` : ""}
       <div class="brief__chips brief__chips--tasks">${TASKS.map((x) => `<button type="button" class="brief__chip${st.task === x.id ? " is-on" : ""}" data-task="${x.id}" aria-pressed="${st.task === x.id}">${esc(t(x.name))}</button>`).join("")}</div>`,
     () => `<h2 class="brief__title" id="brief-title">${esc(t(task().name))} · ${esc(t(TEXT.t1).toLowerCase())}</h2>${questions().map(field).join("")}`,
     () => `<h2 class="brief__title" id="brief-title">${esc(t(TEXT.t2))}</h2>${COMMON.map(field).join("")}
@@ -177,9 +187,10 @@
 
   box.addEventListener("click", async (e) => {
     if (e.target === box) { box.close(); return; }
-    const el = e.target.closest("[data-task],[data-pick],[data-go],[data-copy],.brief__close");
+    const el = e.target.closest("[data-task],[data-pick],[data-go],[data-copy],[data-unref],.brief__close");
     if (!el) return;
     if (el.classList.contains("brief__close")) { box.close(); return; }
+    if (el.hasAttribute("data-unref")) { st.ref = ""; paint(true); return; }
     if (el.dataset.task) {
       if (st.task !== el.dataset.task) st.ans = {};
       st.task = el.dataset.task;
@@ -211,13 +222,19 @@
     else st.ans[f] = e.target.value;
   });
 
-  const open = () => {
+  const open = (ref) => {
     if (box.open) return;
+    st.ref = ref;
     paint(false);
     box.showModal();
     window.SITE.modal && window.SITE.modal(true);
   };
   box.addEventListener("close", () => { window.SITE.modal && window.SITE.modal(false); });
-  document.addEventListener("click", (e) => { if (e.target.closest("[data-brief]")) { e.preventDefault(); open(); } });
+  document.addEventListener("click", (e) => {
+    const from = e.target.closest("[data-brief]");
+    if (!from) return;
+    e.preventDefault();
+    open(from.hasAttribute("data-brief-ref") && window.SITE.heroNow ? window.SITE.heroNow() : "");
+  });
   I18N.onChange(() => { if (box.open) paint(false); });
 })();

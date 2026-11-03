@@ -207,6 +207,8 @@
     setTimeout(() => { videos[state.i].currentTime = 0; }, 350);
   });
   const openPreview = () => window.SITE.openWork(SCENES[state.i].id);
+  // кнопка «хочу такой ролик» берёт в бриф работу, которая сейчас в Preview
+  window.SITE.heroNow = () => SCENES[state.i].id;
   preview.addEventListener("click", openPreview);
   preview.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPreview(); } });
 
