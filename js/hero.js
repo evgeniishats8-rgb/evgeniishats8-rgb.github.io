@@ -145,7 +145,7 @@
 
   /* кадр стоит HOLD, затем за FLOW перетекает в следующий через голограмму */
   const HOLD = 4000, FLOW = 2000, PATIENCE = 3000;
-  const state = { i: 0, restAt: 0, live: false, inView: true, held: false, active: true };
+  const state = { i: 0, restAt: 0, live: false, opened: false, inView: true, held: false, active: true };
   const flow = { on: false, from: 0, to: 0, at: 0, warm: false };
   const nextOf = (i) => (i + 1) % SCENES.length;
   const syncVideos = () => {
@@ -368,10 +368,11 @@
   const tickQueue = (now) => {
     if (flow.on) return;
     // пока ролик грузится, стоит его постер: отсчёт кадра идёт с момента, когда ролик пошёл,
-    // но не позже PATIENCE, чтобы битый файл не останавливал очередь
+    // но не позже PATIENCE, чтобы битый файл не останавливал очередь. Первый кадр (полёт) ждёт вдвое дольше
     if (!state.live) {
-      if (videos[state.i].readyState < 2 && now - state.restAt < PATIENCE) return;
-      state.live = true;
+      const patience = state.opened ? PATIENCE : PATIENCE * 2;
+      if (videos[state.i].readyState < 2 && now - state.restAt < patience) return;
+      state.live = state.opened = true;
       state.restAt = now;
     }
     const wait = now - state.restAt;
