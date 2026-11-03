@@ -142,6 +142,12 @@ video,img{display:block;max-width:100%}
 .card.is-live .card__ghost--echo{opacity:.2}
 @keyframes ghost{to{translate:16% 9%}}
 .card__holo{position:absolute;inset:0;pointer-events:none;mix-blend-mode:soft-light;opacity:.55;background:linear-gradient(calc(110deg + var(--ry,0deg)*4),transparent 30%,rgba(143,214,255,.9) 48%,transparent 66%)}
+/* Safari не всегда прячет обратную сторону в 3D, поэтому видимую сторону переключаем сами на середине переворота */
+.card__front,.card__back{transition:visibility 0s .3s}
+.card.is-live .card__front,.card.is-live .card__back{transition-delay:0s}
+.card__back{visibility:hidden}
+.card.is-flipped .card__back{visibility:visible}
+.card.is-flipped .card__front{visibility:hidden}
 .card__back{transform:rotateY(180deg);background:#121316;color:var(--paper);display:grid;align-content:space-between;padding:6%}
 .card__found{font-family:Flex,sans-serif;font-stretch:118%;font-size:clamp(16px,2vw,28px);line-height:1.15;max-width:22ch}
 .card__links{font:400 clamp(10px,1.1vw,14px)/1.7 Mono,monospace}
@@ -324,6 +330,13 @@ video,img{display:block;max-width:100%}
   .hint-fine{display:none}.hint-touch{display:inline}
 }
 @media (hover:none){.hint-fine{display:none}.hint-touch{display:inline}.services__float{display:none}}
+@media (max-width:400px){.nav__links a[href="#blender"]{display:none}}
+/* на пальце зона нажатия больше самой надписи, раскладка не сдвигается */
+@media (pointer:coarse){
+  .nav__links a,.nav__links button,.works__filter button{padding-top:12px;padding-bottom:12px;margin-top:-12px;margin-bottom:-12px}
+  .end a,.card__links a{position:relative}
+  .end a::after,.card__links a::after{content:"";position:absolute;inset:-10px -4px}
+}
 
 /* без WebGL и при запрете анимации */
 .no-gl .hero{height:auto}

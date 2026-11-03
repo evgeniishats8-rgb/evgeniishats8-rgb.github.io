@@ -171,7 +171,11 @@
   card.addEventListener("pointermove", (e) => { moved += Math.abs(e.movementX) + Math.abs(e.movementY); tilt(e); });
   card.addEventListener("pointerleave", rest);
   card.addEventListener("pointerup", (e) => { if (e.pointerType !== "mouse") rest(); });
-  const flip = () => { flipped = !flipped; body.style.setProperty("--flip", flipped ? "180deg" : "0deg"); };
+  const flip = () => {
+    flipped = !flipped;
+    body.style.setProperty("--flip", flipped ? "180deg" : "0deg");
+    card.classList.toggle("is-flipped", flipped);
+  };
   card.addEventListener("click", () => { if (moved < 14 || fine) flip(); });
   card.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); flip(); } });
 

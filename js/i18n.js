@@ -19,7 +19,7 @@
     "card.surname": "SHATS", "card.name": "EVGENII", "card.city": "HAIFA · TEL AVIV", "card.sign": "Shats",
     "svc.1d": "LABA, IKAR, ER-Telecom", "svc.3d": "Zepro, Detsky Mir",
     "nav.process": "process", "hero.reset": "reset layout", "hero.queue": "Queue next", "hero.rerun": "Re-run", "hero.sound": "play with sound",
-    "works.arrange": "arrange", "end.copy": "copy", "end.copied": "copied", "end.top": "back to top",
+    "works.arrange": "arrange", "end.copy": "copy", "end.cv": "cv, pdf (ru)", "card.cv": "cv, pdf (ru)", "nav.cv": "cv", "end.copied": "copied", "end.top": "back to top",
     "end.legal": "© 2026 Evgenii Shats. All rights reserved. No copying or reuse of the works without permission.",
     "reel.cap": "JDROBYSHEV showreel, 1:30", "work.more": "watch on instagram →", "close": "close",
   };
